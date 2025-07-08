@@ -5,3 +5,7 @@ server/public
 vite.config.ts.*
 *.tar.gz
 venv
+__pycache__/
+**/__pycache__/
+fastapi_server/__pycache__/
+fastapi_server/**/__pycache__/
