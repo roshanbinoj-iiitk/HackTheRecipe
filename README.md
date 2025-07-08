@@ -23,25 +23,42 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
 
 ### Prerequisites
 
-- Node.js 18+ 
+- Node.js 18+
 - npm or yarn
 
 ### Installation
 
 1. **Clone or download this project**
 
-2. **Install dependencies**
+2. **Install dependencies for both client and server**
+
    ```bash
+   cd client
    npm install
+   cd ../fastapi_server
+   python3 -m venv venv
+   source venv/bin/activate
+   pip install -r requirements.txt
    ```
 
-3. **Start the development server**
+3. **Start the FastAPI backend**
+
+   ```bash
+   uvicorn main:app --reload
+   ```
+
+   The API will be available at `http://localhost:8000`
+
+4. **Start the React development server**
+
    ```bash
    npm run dev
    ```
 
-4. **Open your browser**
-   Navigate to `http://localhost:5000`
+   The frontend will be available at `http://localhost:5000`
+
+5. **Open your browser**
+   Navigate to `http://localhost:5000` to use the app.
 
 ## Project Structure
 
@@ -112,6 +129,7 @@ npm run start
 ### Cloud Deployment
 
 This project is ready for deployment on:
+
 - Vercel
 - Netlify
 - Railway
