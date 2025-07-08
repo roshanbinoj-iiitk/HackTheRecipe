@@ -37,7 +37,7 @@ export default function Header({ onSearch, searchQuery, cartCount, onCartClick }
             <div className="flex items-center">
               <div className="text-2xl font-bold text-walmart-blue">
                 <ShoppingCart className="inline mr-2" size={28} />
-                Walmart
+                HackTheRecipe
               </div>
             </div>
 
