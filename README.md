@@ -41,7 +41,15 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
    pip install -r requirements.txt
    ```
 
-3. **Start the FastAPI backend**
+3. **Set up environment variables for Gemini API**
+
+   Create a `.env` file in the `fastapi_server` directory with:
+
+   ```
+   GEMINI_API_KEY=your-gemini-api-key
+   ```
+
+4. **Start the FastAPI backend**
 
    ```bash
    uvicorn main:app --reload
@@ -49,7 +57,7 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
 
    The API will be available at `http://localhost:8000`
 
-4. **Start the React development server**
+5. **Start the React development server**
 
    ```bash
    npm run dev
@@ -57,7 +65,7 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
 
    The frontend will be available at `http://localhost:5000`
 
-5. **Open your browser**
+6. **Open your browser**
    Navigate to `http://localhost:5000` to use the app.
 
 ## Project Structure

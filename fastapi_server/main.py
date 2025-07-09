@@ -3,6 +3,7 @@ from typing import List
 from models import Product, ProductDB
 from storage import storage
 from fastapi.middleware.cors import CORSMiddleware
+from chat import router as chat_router
 
 app = FastAPI()
 
@@ -14,6 +15,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(chat_router)
 
 @app.get("/api/products", response_model=List[Product])
 def get_all_products():
