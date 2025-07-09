@@ -1,5 +1,5 @@
 import csv
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, text
 from sqlalchemy.orm import sessionmaker
 from models import ProductDB, Base
 from typing import List
@@ -13,6 +13,7 @@ Base.metadata.create_all(bind=engine)
 class DBStorage:
     def __init__(self):
         self.load_csv_data()
+        self.create_cart_table()
 
     def load_csv_data(self):
         session = SessionLocal()
@@ -68,5 +69,80 @@ class DBStorage:
             session.commit()
             session.refresh(product)
             return product
+        
+    def create_cart_table(self):
+        with SessionLocal() as session:
+            session.execute(text("""
+                CREATE TABLE IF NOT EXISTS cart (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    product_id TEXT,
+                    quantity INTEGER,
+                    FOREIGN KEY(product_id) REFERENCES products(id)
+                )
+            """))
+            session.commit()
+    
+    from sqlalchemy import text
+
+    def add_to_cart(self, product_id: str, quantity: int):
+        with SessionLocal() as session:
+            # Check if item already in cart
+            result = session.execute(
+                text("SELECT quantity FROM cart WHERE product_id = :product_id"),
+                {"product_id": product_id}
+            ).fetchone()
+            if result:
+                # Update quantity
+                session.execute(
+                    text("UPDATE cart SET quantity = quantity + :quantity WHERE product_id = :product_id"),
+                    {"product_id": product_id, "quantity": quantity}
+                )
+            else:
+                # Insert new item
+                session.execute(
+                    text("INSERT INTO cart (product_id, quantity) VALUES (:product_id, :quantity)"),
+                    {"product_id": product_id, "quantity": quantity}
+                )
+            session.commit()
+    
+    def get_cart_items(self):
+        with SessionLocal() as session:
+            result = session.execute(text("""
+                SELECT cart.product_id, cart.quantity, products.productName, products.price, products.discountPrice, products.brand, products.imageUrl, products.quantity as productQuantity
+                FROM cart
+                JOIN products ON cart.product_id = products.id
+            """))
+            return [
+                {
+                    "product": {
+                        "_id": row[0],
+                        "productName": row[2],
+                        "price": row[3],
+                        "discountPrice": row[4] if row[4] is not None else row[3],
+                        "brand": row[5],
+                        "imageUrl": row[6],
+                        "quantity": row[7],
+                    },
+                    "quantity": row[1],
+                }
+                for row in result.fetchall()
+            ]
+        
+    def update_cart_item(self, product_id: str, quantity: int):
+        with SessionLocal() as session:
+            session.execute(
+                text("UPDATE cart SET quantity = :quantity WHERE product_id = :product_id"),
+                {"product_id": product_id, "quantity": quantity}
+            )
+            session.commit()
+
+    def remove_from_cart(self, product_id: str):
+        with SessionLocal() as session:
+            session.execute(
+                text("DELETE FROM cart WHERE product_id = :product_id"),
+                {"product_id": product_id}
+            )
+            session.commit()
 
 storage = DBStorage()
+storage.add_to_cart("1000001", 5)
