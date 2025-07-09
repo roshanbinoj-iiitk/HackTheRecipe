@@ -145,4 +145,3 @@ class DBStorage:
             session.commit()
 
 storage = DBStorage()
-storage.add_to_cart("1000001", 5)
