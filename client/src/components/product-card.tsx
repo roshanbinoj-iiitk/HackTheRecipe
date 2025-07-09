@@ -3,6 +3,7 @@ import { Heart, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
+// Adjust the import path as necessary
 
 // The product prop should be an object, not a string
 interface Product {
@@ -18,7 +19,7 @@ interface Product {
 
 interface ProductCardProps {
   product: Product;
-  onAddToCart: (productId: string, quantity?: number) => void;
+  onAddToCart: (product: Product) => void;
 }
 
 export default function ProductCard({
@@ -39,7 +40,8 @@ export default function ProductCard({
   };
 
   const handleAddToCart = () => {
-    if (!product._id) {
+    onAddToCart(product);
+    if (!product.id) {
       toast({
         title: "Error",
         description: "Product ID is missing.",

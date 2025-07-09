@@ -19,11 +19,16 @@ export function useCart() {
   }, []);
 
   const addToCart = async (product: Product, quantity: number = 1) => {
-    if (!product || typeof product !== "object" || !product._id) {
+    if (!product || typeof product !== "object") {
       console.error("Product object is missing or invalid:", product);
       return;
     }
-    const productId = product._id;
+    // Support both _id and id
+    const productId = product._id || product.id;
+    if (!productId || typeof productId !== "string") {
+      console.error("Product object is missing or invalid:", product);
+      return;
+    }
     await fetch("http://localhost:8000/api/cart", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
