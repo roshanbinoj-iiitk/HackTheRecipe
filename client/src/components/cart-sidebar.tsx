@@ -98,7 +98,9 @@ export default function CartSidebar({
                     <Button
                       variant="outline"
                       size="sm"
-                      onClick={() => onUpdateQuantity(item.product._id!, item.quantity - 1)}
+                      onClick={() => {
+                              if (item.quantity > 1) onUpdateQuantity(item.product._id!, item.quantity - 1);
+                              }}
                       className="h-8 w-8 p-0"
                     >
                       <Minus size={12} />
