@@ -3,13 +3,15 @@ import { Search, User, ShoppingCart, MessageCircle } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import ChatWindow from "@/components/chat/ChatWindow";
+import type { Product } from "../../../shared/schema";
 
 interface HeaderProps {
   onSearch: (query: string) => void;
   searchQuery: string;
   cartCount: number;
   onCartClick: () => void;
-  addToCart: (productId: string, quantity?: number) => void; // <-- Add this prop
+  addToCart: (product: Product, quantity?: number) => void;
+  products: Product[]; // Pass products to header
 }
 
 export default function Header({
@@ -17,7 +19,8 @@ export default function Header({
   searchQuery,
   cartCount,
   onCartClick,
-  addToCart, // <-- Receive as prop
+  addToCart,
+  products,
 }: HeaderProps) {
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -105,7 +108,8 @@ export default function Header({
       {isChatOpen && (
         <ChatWindow
           onClose={toggleChat}
-          addToCart={addToCart} // <-- use the prop, not local useCart
+          addToCart={addToCart}
+          products={products} // Pass products to ChatWindow
         />
       )}
     </>

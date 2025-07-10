@@ -3,19 +3,7 @@ import { Heart, ShoppingCart } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-// Adjust the import path as necessary
-
-// The product prop should be an object, not a string
-interface Product {
-  _id: string;
-  productName: string;
-  brand: string;
-  price: string;
-  discountPrice: string;
-  imageUrl: string;
-  quantity: string;
-  category: string;
-}
+import type { Product } from "../../../shared/schema"; // Import shared Product type
 
 interface ProductCardProps {
   product: Product;
@@ -41,7 +29,7 @@ export default function ProductCard({
 
   const handleAddToCart = () => {
     onAddToCart(product);
-    if (!product.id) {
+    if (!product._id) {
       toast({
         title: "Error",
         description: "Product ID is missing.",
@@ -50,7 +38,6 @@ export default function ProductCard({
       });
       return;
     }
-    onAddToCart(product._id, 1);
     toast({
       title: "Added to cart",
       description: `${product.productName} has been added to your cart.`,
