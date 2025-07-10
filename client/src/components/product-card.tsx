@@ -29,15 +29,15 @@ export default function ProductCard({
 
   const handleAddToCart = () => {
     onAddToCart(product);
-    if (!product._id) {
-      toast({
-        title: "Error",
-        description: "Product ID is missing.",
-        duration: 2000,
-        variant: "destructive",
-      });
-      return;
-    }
+    // if (!product._id) {
+    //   toast({
+    //     title: "Error",
+    //     description: "Product ID is missing.",
+    //     duration: 2000,
+    //     variant: "destructive",
+    //   });
+    //   return;
+    // }
     toast({
       title: "Added to cart",
       description: `${product.productName} has been added to your cart.`,
