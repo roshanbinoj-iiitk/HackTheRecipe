@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
+// @ts-ignore
+import type { Product } from "../../../shared/schema";
 
 interface ChatWindowProps {
   onClose: () => void;
-  addToCart?: (productId: string, quantity?: number) => void; // Optional, for cart integration
+  addToCart?: (product: Product, quantity?: number) => void; // Now expects full product
+  products: Product[]; // New prop
 }
 
 interface IngredientMatch {
@@ -11,7 +14,11 @@ interface IngredientMatch {
   matches: { id: string; productName: string }[];
 }
 
-export default function ChatWindow({ onClose, addToCart }: ChatWindowProps) {
+export default function ChatWindow({
+  onClose,
+  addToCart,
+  products,
+}: ChatWindowProps) {
   const [messages, setMessages] = useState<
     { sender: "user" | "ai"; text: string }[]
   >([{ sender: "ai", text: "What do you want to make today?" }]);
@@ -27,7 +34,7 @@ export default function ChatWindow({ onClose, addToCart }: ChatWindowProps) {
   const handleSend = async () => {
     if (!input.trim() || loading) return;
 
-    const userMessage = { sender: "user", text: input };
+    const userMessage = { sender: "user" as const, text: input };
     setMessages((prev) => [...prev, userMessage]);
     setLoading(true);
 
@@ -97,7 +104,10 @@ export default function ChatWindow({ onClose, addToCart }: ChatWindowProps) {
                 <Button
                   size="sm"
                   onClick={() => {
-                    if (addToCart) addToCart(match.id, 1);
+                    const product = products.find(
+                      (p) => p._id === match.id || p.id === match.id
+                    );
+                    if (addToCart && product) addToCart(product, 1);
                     setCurrentIngredientIdx((idx) => idx + 1);
                   }}
                 >

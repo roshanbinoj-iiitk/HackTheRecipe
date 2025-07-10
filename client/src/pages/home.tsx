@@ -130,6 +130,8 @@ export default function Home() {
         searchQuery={searchQuery}
         cartCount={getCartCount()}
         onCartClick={() => setIsCartOpen(true)}
+        addToCart={addToCart}
+        products={products} // Pass products to Header
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -214,7 +216,7 @@ export default function Home() {
               <ProductCard
                 key={product._id}
                 product={product}
-                onAddToCart={(_id, qty) => addToCart(_id, qty)}
+                onAddToCart={addToCart}
               />
             ))}
           </div>
