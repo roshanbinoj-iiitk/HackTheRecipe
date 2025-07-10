@@ -34,7 +34,6 @@ import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import Home from "@/pages/home";
 import NotFound from "@/pages/not-found";
-import Header from "@/components/header";
 import { useCart } from "@/hooks/use-cart";
 import { useState } from "react";
 
@@ -51,13 +50,6 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <Toaster />
-        <Header
-          onSearch={handleSearch}
-          searchQuery={searchQuery}
-          cartCount={cart.getCartCount()}
-          onCartClick={handleCartClick}
-          addToCart={cart.addToCart}
-        />
         <Switch>
           <Route
             path="/"
