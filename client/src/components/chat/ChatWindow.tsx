@@ -3,14 +3,26 @@ import { Button } from "@/components/ui/button";
 
 interface ChatWindowProps {
   onClose: () => void;
+  addToCart?: (productId: string, quantity?: number) => void; // Optional, for cart integration
 }
 
-export default function ChatWindow({ onClose }: ChatWindowProps) {
+interface IngredientMatch {
+  ingredient: string;
+  matches: { id: string; productName: string }[];
+}
+
+export default function ChatWindow({ onClose, addToCart }: ChatWindowProps) {
   const [messages, setMessages] = useState<
     { sender: "user" | "ai"; text: string }[]
   >([{ sender: "ai", text: "What do you want to make today?" }]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // For ingredient confirmation flow
+  const [ingredientMatches, setIngredientMatches] = useState<IngredientMatch[]>(
+    []
+  );
+  const [currentIngredientIdx, setCurrentIngredientIdx] = useState(0);
 
   const handleSend = async () => {
     if (!input.trim() || loading) return;
@@ -27,7 +39,21 @@ export default function ChatWindow({ onClose }: ChatWindowProps) {
       });
       if (!res.ok) throw new Error("Failed to get reply");
       const data = await res.json();
-      setMessages((prev) => [...prev, { sender: "ai", text: data.reply }]);
+
+      // If backend returns ingredients for confirmation
+      if (data.ingredients && Array.isArray(data.ingredients)) {
+        setIngredientMatches(data.ingredients);
+        setCurrentIngredientIdx(0);
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: "Let's confirm your ingredients one by one!" },
+        ]);
+      } else {
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: data.reply || "No reply." },
+        ]);
+      }
     } catch (err) {
       setMessages((prev) => [
         ...prev,
@@ -39,6 +65,90 @@ export default function ChatWindow({ onClose }: ChatWindowProps) {
     }
   };
 
+  // Ingredient confirmation UI
+  if (
+    ingredientMatches.length > 0 &&
+    currentIngredientIdx < ingredientMatches.length
+  ) {
+    const ing = ingredientMatches[currentIngredientIdx];
+    return (
+      <div className="fixed bottom-4 right-4 w-80 h-96 bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+        <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
+          <span>Ingredient Confirmation</span>
+          <button onClick={onClose} className="text-white font-bold text-lg">
+            ×
+          </button>
+        </div>
+        <div className="flex-1 p-2 overflow-y-auto space-y-2 text-sm flex flex-col">
+          <div className="mb-2 font-semibold">
+            Ingredient:{" "}
+            <span className="text-walmart-blue">{ing.ingredient}</span>
+          </div>
+          {ing.matches.length === 0 && (
+            <div className="text-gray-500">No close product matches found.</div>
+          )}
+          <ul>
+            {ing.matches.map((match) => (
+              <li
+                key={match.id}
+                className="mb-2 flex items-center justify-between"
+              >
+                <span>{match.productName}</span>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    if (addToCart) addToCart(match.id, 1);
+                    setCurrentIngredientIdx((idx) => idx + 1);
+                  }}
+                >
+                  Add to Cart
+                </Button>
+              </li>
+            ))}
+          </ul>
+          <Button
+            variant="secondary"
+            className="mt-2"
+            onClick={() => setCurrentIngredientIdx((idx) => idx + 1)}
+          >
+            Skip
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // All ingredients processed
+  if (
+    ingredientMatches.length > 0 &&
+    currentIngredientIdx >= ingredientMatches.length
+  ) {
+    return (
+      <div className="fixed bottom-4 right-4 w-80 h-96 bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+        <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
+          <span>Chat with AI</span>
+          <button onClick={onClose} className="text-white font-bold text-lg">
+            ×
+          </button>
+        </div>
+        <div className="flex-1 p-2 flex flex-col items-center justify-center">
+          <div className="text-green-600 font-semibold mb-2">
+            All ingredients processed!
+          </div>
+          <Button
+            onClick={() => {
+              setIngredientMatches([]);
+              setCurrentIngredientIdx(0);
+            }}
+          >
+            Start Over
+          </Button>
+        </div>
+      </div>
+    );
+  }
+
+  // Default chat UI
   return (
     <div className="fixed bottom-4 right-4 w-80 h-96 bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
       <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">

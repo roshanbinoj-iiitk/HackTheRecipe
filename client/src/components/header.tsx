@@ -9,9 +9,16 @@ interface HeaderProps {
   searchQuery: string;
   cartCount: number;
   onCartClick: () => void;
+  addToCart: (productId: string, quantity?: number) => void; // <-- Add this prop
 }
 
-export default function Header({ onSearch, searchQuery, cartCount, onCartClick }: HeaderProps) {
+export default function Header({
+  onSearch,
+  searchQuery,
+  cartCount,
+  onCartClick,
+  addToCart, // <-- Receive as prop
+}: HeaderProps) {
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
   const [isChatOpen, setIsChatOpen] = useState(false);
 
@@ -51,7 +58,10 @@ export default function Header({ onSearch, searchQuery, cartCount, onCartClick }
                   placeholder="Search for products, brands and more..."
                   className="w-full pl-10 pr-4 bg-gray-50 border-gray-300 focus:border-walmart-blue focus:ring-2 focus:ring-walmart-blue focus:ring-opacity-20"
                 />
-                <Search className="absolute left-3 top-3 text-gray-400" size={16} />
+                <Search
+                  className="absolute left-3 top-3 text-gray-400"
+                  size={16}
+                />
               </form>
 
               <Button
@@ -67,7 +77,11 @@ export default function Header({ onSearch, searchQuery, cartCount, onCartClick }
 
             {/* User Actions */}
             <div className="flex items-center space-x-4">
-              <Button variant="ghost" size="sm" className="text-gray-600 hover:text-walmart-blue">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="text-gray-600 hover:text-walmart-blue"
+              >
                 <User size={20} />
               </Button>
               <Button
@@ -79,7 +93,7 @@ export default function Header({ onSearch, searchQuery, cartCount, onCartClick }
                 <ShoppingCart size={20} />
                 {cartCount > 0 && (
                   <span className="absolute -top-2 -right-2 bg-walmart-yellow text-walmart-dark-blue text-xs rounded-full h-5 w-5 flex items-center justify-center font-medium">
-                    {cartCount > 99 ? '99+' : cartCount}
+                    {cartCount > 99 ? "99+" : cartCount}
                   </span>
                 )}
               </Button>
@@ -88,7 +102,12 @@ export default function Header({ onSearch, searchQuery, cartCount, onCartClick }
         </div>
       </header>
 
-      {isChatOpen && <ChatWindow onClose={toggleChat} />}
+      {isChatOpen && (
+        <ChatWindow
+          onClose={toggleChat}
+          addToCart={addToCart} // <-- use the prop, not local useCart
+        />
+      )}
     </>
   );
 }
