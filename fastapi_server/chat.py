@@ -7,6 +7,7 @@ from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 from difflib import get_close_matches
 import ast
+import csv
 
 load_dotenv()  # Load environment variables from .env
 
@@ -23,22 +24,42 @@ class ChatResponse(BaseModel):
     ingredients: list[IngredientMatch]
 
 def get_all_products():
-    # Adjust DB path and schema as needed
-    conn = sqlite3.connect("products.db")
-    cursor = conn.cursor()
-    cursor.execute("SELECT id, productName, price, quantity FROM products")
-    products = cursor.fetchall()
-    conn.close()
-    return [
-        {"id": pid, "productName": name, "price": price, "quantity": quantity}
-        for pid, name, price, quantity in products
-    ]
+    # Adjusted for new CSV format, no quantity column
+    products = []
+    csv_path = Path(__file__).parent.parent / "attached_assets" / "bigbasket_products.csv"
+    with open(csv_path, newline='', encoding='utf-8') as csvfile:
+        reader = csv.DictReader(csvfile)
+        for row in reader:
+            products.append({
+                "id": row["ProductID"],
+                "productName": row["ProductName"],
+                "price": row["Price"],
+                "discountPrice": row["DiscountPrice"],
+                "brand": row["Brand"],
+                "imageUrl": row["Image_Url"],
+                "category": row["Category"],
+                "subCategory": row["SubCategory"],
+                "absoluteUrl": row["Absolute_Url"],
+            })
+    return products
 
 def fuzzy_match_ingredient(ingredient, products):
-    names = [p["productName"] for p in products]
-    matches = get_close_matches(ingredient, names, n=3, cutoff=0.5)
-    # Return dicts for matched products
-    return [p for p in products if p["productName"] in matches]
+    # Normalize ingredient and product names for better matching
+    norm_ingredient = ingredient.strip().lower()
+    raw_keywords = ["raw", "fresh", "whole", "meat", "fillet", "breast", "leg", "drumstick", "cut", "pieces"]
+    exclude_keywords = ["momo", "soup", "curry", "masala", "gravy", "ready", "instant", "mix", "frozen", "nugget", "burger", "patty", "stick", "roll", "tikka", "kebab", "fried", "biryani", "pizza", "sandwich", "pack", "meal", "snack", "chowmein", "chilli", "samosa", "popcorn", "ball", "spring", "dumpling", "momo"]
+    matches = []
+    for p in products:
+        pname = p["productName"].strip().lower()
+        brand = p["brand"].strip().lower() if "brand" in p else ""
+        # Match ingredient in productName or brand
+        if norm_ingredient in pname or norm_ingredient in brand:
+            # Exclude prepared/processed foods
+            if not any(kw in pname for kw in exclude_keywords):
+                # Prefer raw/fresh/meat/fillet etc, or if ingredient is exactly the product name
+                if any(kw in pname for kw in raw_keywords) or norm_ingredient == pname or norm_ingredient == brand:
+                    matches.append(p)
+    return matches
 
 @router.post("", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
@@ -51,17 +72,13 @@ def chat_endpoint(request: ChatRequest):
             google_api_key=api_key,
             temperature=0,
         )
-        # prompt = (
-        #     f"List the ingredients needed to make {request.message}. "
-        #     "Just return the list. Don't return anything else just one or two words. "
-        #     "Just the keywords into a list of items enclosed in [ ] and each item returned in double quotes."
-        # )
         prompt = (
-             f"List the ingredients needed to make {request.message}. "
-             "For each item, only include it if it is a real food ingredient. "
-             "If something is not a food item, return the string 'not a food item' instead of its name. "
-             "Return the result as a list of items enclosed in [ ] and each item in double quotes. "
-             "Do not return anything else."
+            f"List the ingredients needed to make {request.message}. "
+            "For each item, only include it if it is a real food ingredient. "
+            "If something is not a food item, return the string 'not a food item' instead of its name. "
+            "Return the result as a list of items enclosed in [ ] and each item in double quotes. "
+            "Also most importantly, exclude water as an ingredient. "
+            "Do not return anything else."
         )
 
         response = llm.invoke(prompt)
@@ -73,9 +90,9 @@ def chat_endpoint(request: ChatRequest):
         all_products = get_all_products()
         ingredient_matches = []
         for ingredient in ingredients:
-            matches = fuzzy_match_ingredient(ingredient, all_products)
-            ingredient_matches.append(IngredientMatch(ingredient=ingredient, matches=matches))
-
+            if isinstance(ingredient, str) and ingredient.strip().lower() != "not a food item":
+                matches = fuzzy_match_ingredient(ingredient, all_products)
+                ingredient_matches.append(IngredientMatch(ingredient=ingredient, matches=matches))
         return ChatResponse(ingredients=ingredient_matches)
     except Exception as e:
         print("LangChain Gemini error:", e)

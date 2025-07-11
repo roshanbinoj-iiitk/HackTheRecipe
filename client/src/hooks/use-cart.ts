@@ -11,7 +11,7 @@ export function useCart() {
 
   // Fetch cart from backend on mount
   useEffect(() => {
-    fetch("http://localhost:8000/api/cart")
+    fetch("/api/cart")
       .then((res) => res.json())
       .then((data) => {
         setCartItems(Array.isArray(data) ? data : []);
@@ -29,12 +29,12 @@ export function useCart() {
       console.error("Product object is missing or invalid:", product);
       return;
     }
-    await fetch("http://localhost:8000/api/cart", {
+    await fetch("/api/cart", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ product_id: productId, quantity }),
     });
-    const res = await fetch("http://localhost:8000/api/cart");
+    const res = await fetch("/api/cart");
     const data = await res.json();
     setCartItems(Array.isArray(data) ? data : []);
   };
@@ -44,12 +44,12 @@ export function useCart() {
       console.error("Product ID is missing or invalid:", productId);
       return;
     }
-    await fetch("http://localhost:8000/api/cart", {
+    await fetch("/api/cart", {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ product_id: productId, quantity }),
     });
-    const res = await fetch("http://localhost:8000/api/cart");
+    const res = await fetch("/api/cart");
     const data = await res.json();
     setCartItems(Array.isArray(data) ? data : []);
   };
@@ -62,7 +62,7 @@ export function useCart() {
     await fetch(`http://localhost:8000/api/cart/${productId}`, {
       method: "DELETE",
     });
-    const res = await fetch("http://localhost:8000/api/cart");
+    const res = await fetch("/api/cart");
     const data = await res.json();
     setCartItems(Array.isArray(data) ? data : []);
   };

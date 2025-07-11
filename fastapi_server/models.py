@@ -7,7 +7,6 @@ class Product(BaseModel):
     price: str
     discountPrice: str
     imageUrl: str
-    quantity: str
     category: str
     subCategory: str
     absoluteUrl: str
@@ -28,7 +27,6 @@ class ProductDB(Base):
     price = Column(String)
     discountPrice = Column(String)
     imageUrl = Column(String)
-    quantity = Column(String)
     category = Column(String)
     subCategory = Column(String)
     absoluteUrl = Column(String)

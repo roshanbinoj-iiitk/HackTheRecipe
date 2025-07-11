@@ -99,7 +99,6 @@ export default function ProductCard({
         </h3>
 
         <div className="flex items-center justify-between mb-3">
-          <span className="text-xs text-gray-500">{product.quantity}</span>
           <Badge variant="secondary" className="text-xs">
             {product.category}
           </Badge>

@@ -95,8 +95,8 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
 
 ### Adding Your Own Products
 
-1. Replace `attached_assets/BigBasket_1751813510063.csv` with your product data
-2. Ensure CSV format matches: ProductName, Brand, Price, DiscountPrice, Image_Url, Quantity, Category, SubCategory, Absolute_Url
+1. Replace `attached_assets/bigbasket_products.csv` with your product data
+2. Ensure CSV format matches: ProductID, ProductName, Brand, Price, DiscountPrice, Image_Url, Category, SubCategory, Absolute_Url
 3. Restart the server to load new data
 
 ### Theming

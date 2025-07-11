@@ -21,7 +21,7 @@ class DBStorage:
             # Only load if table is empty
             if session.query(ProductDB).first():
                 return
-            with open('../attached_assets/BigBasket.csv', newline='', encoding='utf-8') as csvfile:
+            with open('../attached_assets/bigbasket_products.csv', newline='', encoding='utf-8') as csvfile:
                 reader = csv.DictReader(csvfile)
                 products = [
                     ProductDB(
@@ -31,7 +31,6 @@ class DBStorage:
                         price=row['Price'],
                         discountPrice=row['DiscountPrice'],
                         imageUrl=row['Image_Url'],
-                        quantity=row['Quantity'],
                         category=row['Category'],
                         subCategory=row['SubCategory'],
                         absoluteUrl=row['Absolute_Url'],
@@ -108,7 +107,7 @@ class DBStorage:
     def get_cart_items(self):
         with SessionLocal() as session:
             result = session.execute(text("""
-                SELECT cart.product_id, cart.quantity, products.productName, products.price, products.discountPrice, products.brand, products.imageUrl, products.quantity as productQuantity
+                SELECT cart.product_id, cart.quantity, products.productName, products.price, products.discountPrice, products.brand, products.imageUrl
                 FROM cart
                 JOIN products ON cart.product_id = products.id
             """))
@@ -121,7 +120,6 @@ class DBStorage:
                         "discountPrice": row[4] if row[4] is not None else row[3],
                         "brand": row[5],
                         "imageUrl": row[6],
-                        "quantity": row[7],
                     },
                     "quantity": row[1],
                 }
