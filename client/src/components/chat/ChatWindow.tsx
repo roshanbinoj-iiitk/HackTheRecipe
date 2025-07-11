@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
 // @ts-ignore
 import type { Product } from "../../../shared/schema";
 
@@ -24,6 +25,7 @@ export default function ChatWindow({
   addToCart,
   products,
 }: ChatWindowProps) {
+  const { toast } = useToast();
   const [messages, setMessages] = useState<
     { sender: "user" | "ai"; text: string }[]
   >([]);
@@ -123,7 +125,14 @@ export default function ChatWindow({
                       const product = products.find(
                         (p) => p._id === match.id || p.id === match.id
                       );
-                      if (addToCart && product) addToCart(product, 1);
+                      if (addToCart && product) {
+                        addToCart(product, 1);
+                        toast({
+                          title: "Added to cart",
+                          description: `${product.productName} has been added to your cart.`,
+                          duration: 2000,
+                        });
+                      }
                       setCurrentIngredientIdx((idx) => idx + 1);
                     }}
                   >
