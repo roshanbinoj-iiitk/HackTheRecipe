@@ -26,10 +26,13 @@ def get_all_products():
     # Adjust DB path and schema as needed
     conn = sqlite3.connect("products.db")
     cursor = conn.cursor()
-    cursor.execute("SELECT id, productName FROM products")
+    cursor.execute("SELECT id, productName, price, quantity FROM products")
     products = cursor.fetchall()
     conn.close()
-    return [{"id": pid, "productName": name} for pid, name in products]
+    return [
+        {"id": pid, "productName": name, "price": price, "quantity": quantity}
+        for pid, name, price, quantity in products
+    ]
 
 def fuzzy_match_ingredient(ingredient, products):
     names = [p["productName"] for p in products]
@@ -48,11 +51,19 @@ def chat_endpoint(request: ChatRequest):
             google_api_key=api_key,
             temperature=0,
         )
+        # prompt = (
+        #     f"List the ingredients needed to make {request.message}. "
+        #     "Just return the list. Don't return anything else just one or two words. "
+        #     "Just the keywords into a list of items enclosed in [ ] and each item returned in double quotes."
+        # )
         prompt = (
-            f"List the ingredients needed to make {request.message}. "
-            "Just return the list. Don't return anything else just one or two words. "
-            "Just the keywords into a list of items enclosed in [ ] and each item returned in double quotes."
+             f"List the ingredients needed to make {request.message}. "
+             "For each item, only include it if it is a real food ingredient. "
+             "If something is not a food item, return the string 'not a food item' instead of its name. "
+             "Return the result as a list of items enclosed in [ ] and each item in double quotes. "
+             "Do not return anything else."
         )
+
         response = llm.invoke(prompt)
         try:
             ingredients = ast.literal_eval(response.content)

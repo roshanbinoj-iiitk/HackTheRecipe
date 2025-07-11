@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 // @ts-ignore
 import type { Product } from "../../../shared/schema";
@@ -11,7 +11,12 @@ interface ChatWindowProps {
 
 interface IngredientMatch {
   ingredient: string;
-  matches: { id: string; productName: string }[];
+  matches: {
+    id: string;
+    productName: string;
+    price: string;
+    quantity: string;
+  }[];
 }
 
 export default function ChatWindow({
@@ -21,7 +26,14 @@ export default function ChatWindow({
 }: ChatWindowProps) {
   const [messages, setMessages] = useState<
     { sender: "user" | "ai"; text: string }[]
-  >([{ sender: "ai", text: "What do you want to make today?" }]);
+  >([]);
+
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setMessages([{ sender: "ai", text: "What do you want to make today?" }]);
+    }, 2000); // 2 seconds delay
+    return () => clearTimeout(timer);
+  }, []);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -79,7 +91,7 @@ export default function ChatWindow({
   ) {
     const ing = ingredientMatches[currentIngredientIdx];
     return (
-      <div className="fixed bottom-4 right-4 w-80 h-96 bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+      <div className="fixed bottom-4 right-4 w-[30rem] h-[36rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
         <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
           <span>Ingredient Confirmation</span>
           <button onClick={onClose} className="text-white font-bold text-lg">
@@ -98,21 +110,26 @@ export default function ChatWindow({
             {ing.matches.map((match) => (
               <li
                 key={match.id}
-                className="mb-2 flex items-center justify-between"
+                className="mb-2 flex flex-col items-start justify-between border-b pb-2"
               >
-                <span>{match.productName}</span>
-                <Button
-                  size="sm"
-                  onClick={() => {
-                    const product = products.find(
-                      (p) => p._id === match.id || p.id === match.id
-                    );
-                    if (addToCart && product) addToCart(product, 1);
-                    setCurrentIngredientIdx((idx) => idx + 1);
-                  }}
-                >
-                  Add to Cart
-                </Button>
+                <span className="font-semibold">{match.productName}</span>
+                <span className="text-xs text-gray-600">
+                  Price: ₹{match.price} | Qty: {match.quantity}
+                </span>
+                <div className="mt-1">
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      const product = products.find(
+                        (p) => p._id === match.id || p.id === match.id
+                      );
+                      if (addToCart && product) addToCart(product, 1);
+                      setCurrentIngredientIdx((idx) => idx + 1);
+                    }}
+                  >
+                    Add to Cart
+                  </Button>
+                </div>
               </li>
             ))}
           </ul>
@@ -134,7 +151,7 @@ export default function ChatWindow({
     currentIngredientIdx >= ingredientMatches.length
   ) {
     return (
-      <div className="fixed bottom-4 right-4 w-80 h-96 bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+      <div className="fixed bottom-4 right-4 w-[30rem] h-[36rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
         <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
           <span>Chat with AI</span>
           <button onClick={onClose} className="text-white font-bold text-lg">
@@ -160,7 +177,7 @@ export default function ChatWindow({
 
   // Default chat UI
   return (
-    <div className="fixed bottom-4 right-4 w-80 h-96 bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+    <div className="fixed bottom-4 right-4 w-[30rem] h-[36rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
       <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
         <span>Chat with AI</span>
         <button onClick={onClose} className="text-white font-bold text-lg">
