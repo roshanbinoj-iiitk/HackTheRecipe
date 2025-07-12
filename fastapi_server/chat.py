@@ -11,7 +11,7 @@ import csv
 import re
 from collections import Counter
 
-load_dotenv()  # Load environment variables from .env
+load_dotenv()
 
 router = APIRouter(prefix="/api/chat", tags=["Chat"])
 
@@ -20,7 +20,7 @@ class ChatRequest(BaseModel):
 
 class IngredientMatch(BaseModel):
     ingredient: str
-    matches: list  # List of dicts with product_id and productName
+    matches: list
 
 class ChatResponse(BaseModel):
     ingredients: list[IngredientMatch]
@@ -45,19 +45,16 @@ def get_all_products():
     return products
 
 def simple_tokenize(text):
-    """Simple tokenization without external libraries"""
-    # Remove punctuation and split
     text = re.sub(r'[^\w\s]', ' ', text.lower())
     return [word for word in text.split() if len(word) > 2]
 
 def get_ingredient_synonyms():
-    """Common ingredient synonyms and variations"""
     return {
-        'chicken': ['chicken', 'poultry', 'hen', 'broiler'],
+        'chicken': ['chicken', 'poultry', 'hen', 'broiler', 'fresh boneless chicken breast', 'fresh boneless chicken thigh', 'breast', 'thigh'],
         'onion': ['onion', 'pyaz', 'kanda'],
         'tomato': ['tomato', 'tamatar'],
         'potato': ['potato', 'aloo', 'batata'],
-        'rice': ['rice', 'chawal', 'basmati', 'jasmine'],
+        'rice': ['rice', 'chawal', 'basmati rice', 'jasmine'],
         'oil': ['oil', 'tel', 'cooking oil'],
         'salt': ['salt', 'namak', 'sea salt', 'rock salt'],
         'sugar': ['sugar', 'cheeni', 'shakkar'],
@@ -71,126 +68,115 @@ def get_ingredient_synonyms():
         'cumin': ['cumin', 'jeera'],
         'turmeric': ['turmeric', 'haldi'],
         'coriander': ['coriander', 'dhania'],
-        'pepper': ['pepper', 'kali mirch', 'black pepper']
+        'pepper': ['pepper', 'kali mirch', 'black pepper'],
+        'cilantro': ['cilantro'],
+        'chili powder': ['chili powder', 'red chili powder','chilli powder'],
+        'garam masala': ['garam masala', 'garam'],
+        'fenugreek leaves': ['fenugreek leaves', 'kasuri methi','methi'],
+        'food coloring': ['food color', 'colouring', 'coloring', 'artificial colour', 'artificial color', 'edible color', 'edible dye', 'natural color', 'food colour - red', 'food colour - blue', 'food colour - green'],
+        'green chili': ['green chili', 'hari mirch', 'green chilli', 'green chilies', 'green chilly'],
+        'red chili powder': ['red chili powder', 'red chili', 'lal mirch', 'red chilies', 'red chilly']
     }
 
 def calculate_text_similarity(text1, text2):
-    """Calculate similarity between two texts using token overlap"""
     tokens1 = set(simple_tokenize(text1))
     tokens2 = set(simple_tokenize(text2))
-    
     if not tokens1 or not tokens2:
         return 0
-    
     intersection = tokens1.intersection(tokens2)
     union = tokens1.union(tokens2)
-    
-    # Jaccard similarity
     return len(intersection) / len(union) if union else 0
 
 def smart_ingredient_matching(ingredient, products):
-    """Improved ingredient matching with better logic"""
     norm_ingredient = ingredient.strip().lower()
     synonyms = get_ingredient_synonyms()
-    
-    # Get all possible variations of the ingredient
-    ingredient_variations = synonyms.get(norm_ingredient, [norm_ingredient])
-    ingredient_variations.append(norm_ingredient)
-    
-    # Categories that usually contain raw ingredients
+    ingredient_variations = synonyms.get(norm_ingredient, [norm_ingredient]) + [norm_ingredient]
+
+    if norm_ingredient == "food coloring":
+        def has_coloring(term):
+            term = term.lower()
+            bad_phrases = ['no artificial colour', 'no artificial color', 'no added color', 'no added colour',
+                           'without artificial colour', 'without artificial color']
+            if any(bad in term for bad in bad_phrases):
+                return False
+            return any(color in term for color in ['food colour', 'food color', 'edible colour', 'edible color'])
+
+        matches = [p for p in products if has_coloring(p["productName"])]
+        return matches[:8]
+
     preferred_categories = [
         'fruits', 'vegetables', 'meat', 'seafood', 'dairy', 'grains', 'spices',
         'oil', 'condiments', 'bakery', 'fresh produce', 'protein', 'staples'
     ]
-    
-    # Exclude processed/prepared foods
+
     exclude_keywords = [
-        'ready', 'instant', 'mix', 'frozen', 'prepared', 'cooked', 'fried', 'baked',
-        'curry', 'masala', 'gravy', 'sauce', 'paste', 'powder', 'seasoning',
+        'ready', 'instant', 'mix', 'frozen', 'prepared', 'cooked', 'fried', 'baked','soap', 'cleaner', 'detergent',
+        'curry', 'gravy', 'sauce', 'paste', 'seasoning', 'dip', 'dips',
         'snack', 'chips', 'crackers', 'biscuit', 'cookie', 'cake', 'bread',
         'burger', 'pizza', 'sandwich', 'roll', 'wrap', 'patty', 'nugget',
         'momo', 'dumpling', 'noodles', 'pasta', 'soup', 'biryani',
         'flavour', 'flavored', 'spiced', 'seasoned', 'marinated', 'pickled'
     ]
-    
+
     scored_matches = []
-    
+
     for product in products:
         product_name = product["productName"].strip().lower()
         brand_name = product["brand"].strip().lower() if "brand" in product else ""
         category = product["category"].strip().lower() if "category" in product else ""
         sub_category = product["subCategory"].strip().lower() if "subCategory" in product else ""
-        
-        # Skip processed foods
+
         full_text = f"{product_name} {brand_name}"
-        if any(keyword in full_text for keyword in exclude_keywords):
-            continue
-        
+        if not any(variation in product_name for variation in ingredient_variations):
+            if any(k in full_text for k in exclude_keywords) or len(product_name.split()) > 6:
+                continue
+
         score = 0
         matched_variation = None
-        
-        # Check each ingredient variation
+
         for variation in ingredient_variations:
-            # 1. Exact match (highest priority)
+            variation_pattern = r'\b' + re.escape(variation) + r'\b'
             if variation == product_name or variation == brand_name:
                 score = max(score, 100)
                 matched_variation = variation
                 break
-            
-            # 2. Exact word boundary match
-            variation_pattern = r'\b' + re.escape(variation) + r'\b'
             if re.search(variation_pattern, product_name):
                 score = max(score, 85)
                 matched_variation = variation
             elif re.search(variation_pattern, brand_name):
                 score = max(score, 80)
                 matched_variation = variation
-            
-            # 3. Starts with ingredient
             if product_name.startswith(variation + ' ') or brand_name.startswith(variation + ' '):
                 score = max(score, 75)
                 matched_variation = variation
-            
-            # 4. Contains ingredient (but penalize long product names)
             if variation in product_name:
-                base_score = 50
-                # Penalize if product name is too long (likely processed)
-                word_count = len(product_name.split())
-                if word_count > 5:
-                    base_score -= 20
+                base_score = 70
+                if len(product_name.split()) > 4:
+                    base_score -= 10
                 score = max(score, base_score)
                 matched_variation = variation
             elif variation in brand_name:
                 score = max(score, 45)
                 matched_variation = variation
-        
+            if any(word.startswith(norm_ingredient) for word in product_name.split()):
+                score = max(score, 60)
+                matched_variation = variation
+
         if score > 0:
-            # 5. Category bonus
             if any(cat in category or cat in sub_category for cat in preferred_categories):
                 score += 15
-            
-            # 6. Text similarity bonus
             similarity = calculate_text_similarity(norm_ingredient, product_name)
-            score += similarity * 30
-            
-            # 7. Preferred keywords bonus
+            score += similarity * 25
             preferred_keywords = ['fresh', 'raw', 'organic', 'pure', 'natural', 'whole']
-            if any(keyword in full_text for keyword in preferred_keywords):
+            if any(k in full_text for k in preferred_keywords):
                 score += 20
-            
-            # 8. Simple product name bonus (less likely to be processed)
             if len(product_name.split()) <= 3:
                 score += 10
-            
-            # Only include matches with reasonable scores
-            if score >= 30:
+            if score >= 50:
                 scored_matches.append((product, score, matched_variation))
-    
-    # Sort by score descending
+
     scored_matches.sort(key=lambda x: x[1], reverse=True)
-    
-    # Return top 8 matches
-    return [match[0] for match in scored_matches[:8]]
+    return [match[0] for match in scored_matches[:8]] or []
 
 @router.post("", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
@@ -228,4 +214,4 @@ def chat_endpoint(request: ChatRequest):
         return ChatResponse(ingredients=ingredient_matches)
     except Exception as e:
         print("LangChain Gemini error:", e)
-        raise HTTPException(status_code=500, detail=f"LangChain Gemini error: {e}")
+        raise HTTPException(status_code=500, detail=f"LangChain Gemini error: {e}")
