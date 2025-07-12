@@ -8,6 +8,8 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from difflib import get_close_matches
 import ast
 import csv
+import re
+from collections import Counter
 
 load_dotenv()  # Load environment variables from .env
 
@@ -24,7 +26,6 @@ class ChatResponse(BaseModel):
     ingredients: list[IngredientMatch]
 
 def get_all_products():
-    # Adjusted for new CSV format, no quantity column
     products = []
     csv_path = Path(__file__).parent.parent / "attached_assets" / "bigbasket_products.csv"
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
@@ -43,23 +44,153 @@ def get_all_products():
             })
     return products
 
-def fuzzy_match_ingredient(ingredient, products):
-    # Normalize ingredient and product names for better matching
+def simple_tokenize(text):
+    """Simple tokenization without external libraries"""
+    # Remove punctuation and split
+    text = re.sub(r'[^\w\s]', ' ', text.lower())
+    return [word for word in text.split() if len(word) > 2]
+
+def get_ingredient_synonyms():
+    """Common ingredient synonyms and variations"""
+    return {
+        'chicken': ['chicken', 'poultry', 'hen', 'broiler'],
+        'onion': ['onion', 'pyaz', 'kanda'],
+        'tomato': ['tomato', 'tamatar'],
+        'potato': ['potato', 'aloo', 'batata'],
+        'rice': ['rice', 'chawal', 'basmati', 'jasmine'],
+        'oil': ['oil', 'tel', 'cooking oil'],
+        'salt': ['salt', 'namak', 'sea salt', 'rock salt'],
+        'sugar': ['sugar', 'cheeni', 'shakkar'],
+        'milk': ['milk', 'doodh', 'dairy'],
+        'butter': ['butter', 'makhan'],
+        'flour': ['flour', 'maida', 'atta', 'wheat flour'],
+        'paneer': ['paneer', 'cottage cheese'],
+        'yogurt': ['yogurt', 'curd', 'dahi'],
+        'ginger': ['ginger', 'adrak'],
+        'garlic': ['garlic', 'lahsun'],
+        'cumin': ['cumin', 'jeera'],
+        'turmeric': ['turmeric', 'haldi'],
+        'coriander': ['coriander', 'dhania'],
+        'pepper': ['pepper', 'kali mirch', 'black pepper']
+    }
+
+def calculate_text_similarity(text1, text2):
+    """Calculate similarity between two texts using token overlap"""
+    tokens1 = set(simple_tokenize(text1))
+    tokens2 = set(simple_tokenize(text2))
+    
+    if not tokens1 or not tokens2:
+        return 0
+    
+    intersection = tokens1.intersection(tokens2)
+    union = tokens1.union(tokens2)
+    
+    # Jaccard similarity
+    return len(intersection) / len(union) if union else 0
+
+def smart_ingredient_matching(ingredient, products):
+    """Improved ingredient matching with better logic"""
     norm_ingredient = ingredient.strip().lower()
-    raw_keywords = ["raw", "fresh", "whole", "meat", "fillet", "breast", "leg", "drumstick", "cut", "pieces"]
-    exclude_keywords = ["momo", "soup", "curry", "masala", "gravy", "ready", "instant", "mix", "frozen", "nugget", "burger", "patty", "stick", "roll", "tikka", "kebab", "fried", "biryani", "pizza", "sandwich", "pack", "meal", "snack", "chowmein", "chilli", "samosa", "popcorn", "ball", "spring", "dumpling", "momo"]
-    matches = []
-    for p in products:
-        pname = p["productName"].strip().lower()
-        brand = p["brand"].strip().lower() if "brand" in p else ""
-        # Match ingredient in productName or brand
-        if norm_ingredient in pname or norm_ingredient in brand:
-            # Exclude prepared/processed foods
-            if not any(kw in pname for kw in exclude_keywords):
-                # Prefer raw/fresh/meat/fillet etc, or if ingredient is exactly the product name
-                if any(kw in pname for kw in raw_keywords) or norm_ingredient == pname or norm_ingredient == brand:
-                    matches.append(p)
-    return matches
+    synonyms = get_ingredient_synonyms()
+    
+    # Get all possible variations of the ingredient
+    ingredient_variations = synonyms.get(norm_ingredient, [norm_ingredient])
+    ingredient_variations.append(norm_ingredient)
+    
+    # Categories that usually contain raw ingredients
+    preferred_categories = [
+        'fruits', 'vegetables', 'meat', 'seafood', 'dairy', 'grains', 'spices',
+        'oil', 'condiments', 'bakery', 'fresh produce', 'protein', 'staples'
+    ]
+    
+    # Exclude processed/prepared foods
+    exclude_keywords = [
+        'ready', 'instant', 'mix', 'frozen', 'prepared', 'cooked', 'fried', 'baked',
+        'curry', 'masala', 'gravy', 'sauce', 'paste', 'powder', 'seasoning',
+        'snack', 'chips', 'crackers', 'biscuit', 'cookie', 'cake', 'bread',
+        'burger', 'pizza', 'sandwich', 'roll', 'wrap', 'patty', 'nugget',
+        'momo', 'dumpling', 'noodles', 'pasta', 'soup', 'biryani',
+        'flavour', 'flavored', 'spiced', 'seasoned', 'marinated', 'pickled'
+    ]
+    
+    scored_matches = []
+    
+    for product in products:
+        product_name = product["productName"].strip().lower()
+        brand_name = product["brand"].strip().lower() if "brand" in product else ""
+        category = product["category"].strip().lower() if "category" in product else ""
+        sub_category = product["subCategory"].strip().lower() if "subCategory" in product else ""
+        
+        # Skip processed foods
+        full_text = f"{product_name} {brand_name}"
+        if any(keyword in full_text for keyword in exclude_keywords):
+            continue
+        
+        score = 0
+        matched_variation = None
+        
+        # Check each ingredient variation
+        for variation in ingredient_variations:
+            # 1. Exact match (highest priority)
+            if variation == product_name or variation == brand_name:
+                score = max(score, 100)
+                matched_variation = variation
+                break
+            
+            # 2. Exact word boundary match
+            variation_pattern = r'\b' + re.escape(variation) + r'\b'
+            if re.search(variation_pattern, product_name):
+                score = max(score, 85)
+                matched_variation = variation
+            elif re.search(variation_pattern, brand_name):
+                score = max(score, 80)
+                matched_variation = variation
+            
+            # 3. Starts with ingredient
+            if product_name.startswith(variation + ' ') or brand_name.startswith(variation + ' '):
+                score = max(score, 75)
+                matched_variation = variation
+            
+            # 4. Contains ingredient (but penalize long product names)
+            if variation in product_name:
+                base_score = 50
+                # Penalize if product name is too long (likely processed)
+                word_count = len(product_name.split())
+                if word_count > 5:
+                    base_score -= 20
+                score = max(score, base_score)
+                matched_variation = variation
+            elif variation in brand_name:
+                score = max(score, 45)
+                matched_variation = variation
+        
+        if score > 0:
+            # 5. Category bonus
+            if any(cat in category or cat in sub_category for cat in preferred_categories):
+                score += 15
+            
+            # 6. Text similarity bonus
+            similarity = calculate_text_similarity(norm_ingredient, product_name)
+            score += similarity * 30
+            
+            # 7. Preferred keywords bonus
+            preferred_keywords = ['fresh', 'raw', 'organic', 'pure', 'natural', 'whole']
+            if any(keyword in full_text for keyword in preferred_keywords):
+                score += 20
+            
+            # 8. Simple product name bonus (less likely to be processed)
+            if len(product_name.split()) <= 3:
+                score += 10
+            
+            # Only include matches with reasonable scores
+            if score >= 30:
+                scored_matches.append((product, score, matched_variation))
+    
+    # Sort by score descending
+    scored_matches.sort(key=lambda x: x[1], reverse=True)
+    
+    # Return top 8 matches
+    return [match[0] for match in scored_matches[:8]]
 
 @router.post("", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
@@ -78,6 +209,7 @@ def chat_endpoint(request: ChatRequest):
             "If something is not a food item, return the string 'not a food item' instead of its name. "
             "Return the result as a list of items enclosed in [ ] and each item in double quotes. "
             "Also most importantly, exclude water as an ingredient. "
+            "Use basic ingredient names (e.g., 'chicken' not 'chicken breast', 'onion' not 'red onion'). "
             "Do not return anything else."
         )
 
@@ -91,9 +223,9 @@ def chat_endpoint(request: ChatRequest):
         ingredient_matches = []
         for ingredient in ingredients:
             if isinstance(ingredient, str) and ingredient.strip().lower() != "not a food item":
-                matches = fuzzy_match_ingredient(ingredient, all_products)
+                matches = smart_ingredient_matching(ingredient, all_products)
                 ingredient_matches.append(IngredientMatch(ingredient=ingredient, matches=matches))
         return ChatResponse(ingredients=ingredient_matches)
     except Exception as e:
         print("LangChain Gemini error:", e)
-        raise HTTPException(status_code=500, detail=f"LangChain Gemini error: {e}")
+        raise HTTPException(status_code=500, detail=f"LangChain Gemini error: {e}")
