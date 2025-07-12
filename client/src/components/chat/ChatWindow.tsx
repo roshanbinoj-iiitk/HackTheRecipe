@@ -93,7 +93,7 @@ export default function ChatWindow({
   ) {
     const ing = ingredientMatches[currentIngredientIdx];
     return (
-      <div className="fixed bottom-4 right-4 w-[30rem] h-[36rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+      <div className="fixed bottom-4 right-4 w-[40rem] h-[42rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
         <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
           <span>Ingredient Confirmation</span>
           <button onClick={onClose} className="text-white font-bold text-lg">
@@ -109,38 +109,71 @@ export default function ChatWindow({
             <div className="text-gray-500">No close product matches found.</div>
           )}
           <ul>
-            {ing.matches.map((match) => (
-              <li
-                key={match.id}
-                className="mb-2 flex flex-col items-start justify-between border-b pb-2"
-              >
-                <span className="font-semibold">{match.productName}</span>
-                <span className="text-xs text-gray-600">
-                  Price: ₹{match.price} | Qty: {match.quantity}
-                </span>
-                <div className="mt-1">
-                  <Button
-                    size="sm"
-                    onClick={() => {
-                      const product = products.find(
-                        (p) => p._id === match.id || p.id === match.id
-                      );
-                      if (addToCart && product) {
-                        addToCart(product, 1);
-                        toast({
-                          title: "Added to cart",
-                          description: `${product.productName} has been added to your cart.`,
-                          duration: 2000,
-                        });
-                      }
-                      setCurrentIngredientIdx((idx) => idx + 1);
-                    }}
-                  >
-                    Add to Cart
-                  </Button>
-                </div>
-              </li>
-            ))}
+            {ing.matches.map((match) => {
+              const product = products.find(
+                (p) => p._id === match.id || p.id === match.id
+              );
+              // Try different possible image field names
+              const imageUrl = product?.image || product?.imageUrl || product?.img || product?.picture;
+              
+              return (
+                <li
+                  key={match.id}
+                  className="mb-3 flex items-center space-x-3 border-b pb-3"
+                >
+                  {/* Image first */}
+                  <div className="flex-shrink-0">
+                    {imageUrl ? (
+                      <img
+                        src={imageUrl}
+                        alt={match.productName}
+                        className="w-20 h-20 object-cover rounded-md border shadow-sm"
+                        onError={(e) => {
+                          const target = e.currentTarget;
+                          target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yOCAzMkMzMC4yMDkxIDMyIDMyIDMwLjIwOTEgMzIgMjhDMzIgMjUuNzkwOSAzMC4yMDkxIDI0IDI4IDI0QzI1Ljc5MDkgMjQgMjQgMjUuNzkwOSAyNCAyOCMyNCAzMC4yMDkxIDI1Ljc5MDkgMzIgMjggMzJaIiBmaWxsPSIjOUI5QjlCIi8+CjxwYXRoIGQ9Ik0yMCA0NEw2MCA0NEw1MiAzNkw0NCA0NEwyOCAyOEwyMCA0NFoiIGZpbGw9IiM5QjlCOUIiLz4KPC9zdmc+';
+                          target.className = "w-20 h-20 object-cover rounded-md border bg-gray-100";
+                        }}
+                      />
+                    ) : (
+                      <div className="w-20 h-20 bg-gray-100 rounded-md border flex items-center justify-center">
+                        <svg className="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* Product details */}
+                  <div className="flex-1 min-w-0">
+                    <h4 className="font-semibold text-sm leading-tight mb-1 text-gray-900">
+                      {match.productName}
+                    </h4>
+                    <div className="text-xs text-gray-600 mb-2">
+                      <span className="font-medium">₹{match.price}</span>
+                      <span className="mx-1">•</span>
+                      <span>{match.quantity}</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      className="text-xs px-3 py-1 h-7"
+                      onClick={() => {
+                        if (addToCart && product) {
+                          addToCart(product, 1);
+                          toast({
+                            title: "Added to cart",
+                            description: `${product.productName} has been added to your cart.`,
+                            duration: 2000,
+                          });
+                        }
+                        setCurrentIngredientIdx((idx) => idx + 1);
+                      }}
+                    >
+                      Add to Cart
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
           </ul>
           <Button
             variant="secondary"
@@ -160,7 +193,7 @@ export default function ChatWindow({
     currentIngredientIdx >= ingredientMatches.length
   ) {
     return (
-      <div className="fixed bottom-4 right-4 w-[30rem] h-[36rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+      <div className="fixed bottom-4 right-4 w-[40rem] h-[42rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
         <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
           <span>Chat with AI</span>
           <button onClick={onClose} className="text-white font-bold text-lg">
@@ -186,7 +219,7 @@ export default function ChatWindow({
 
   // Default chat UI
   return (
-    <div className="fixed bottom-4 right-4 w-[30rem] h-[36rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+    <div className="fixed bottom-4 right-4 w-[40rem] h-[42rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
       <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
         <span>Chat with AI</span>
         <button onClick={onClose} className="text-white font-bold text-lg">
