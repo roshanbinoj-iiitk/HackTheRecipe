@@ -190,18 +190,26 @@ def chat_endpoint(request: ChatRequest):
             temperature=0,
         )
         prompt = (
-            f"List the ingredients needed to make {request.message}. "
-            "For each item, only include it if it is a real food ingredient. "
-            "If something is not a food item, return the string 'not a food item' instead of its name. "
-            "Return the result as a list of items enclosed in [ ] and each item in double quotes. "
-            "Also most importantly, exclude water as an ingredient. "
-            "Use basic ingredient names (e.g., 'chicken' not 'chicken breast', 'onion' not 'red onion'). "
-            "Do not return anything else."
+            f"Analyze the following request: '{request.message}'. "
+            "If this is asking for ingredients to make a food item, recipe, dish, or any edible item, "
+            "then list the ingredients needed as a list of items enclosed in [ ] with each item in double quotes. "
+            "For each ingredient, only include it if it is a real food ingredient. "
+            "Exclude water as an ingredient and use basic ingredient names (e.g., 'chicken' not 'chicken breast'). "
+            "However, if the request is NOT about food, cooking, recipes, or any edible items "
+            "(e.g., if it's about objects, places, people, abstract concepts, non-edible items, etc.), "
+            "then respond with exactly: 'NON_FOOD_ITEM_DETECTED'. "
+            "Do not return anything else in either case."
         )
 
         response = llm.invoke(prompt)
+        response_content = response.content.strip()
+        
+        # Check if LLM detected a non-food item
+        if response_content == "NON_FOOD_ITEM_DETECTED":
+            raise HTTPException(status_code=400, detail="Not a food item")
+        
         try:
-            ingredients = ast.literal_eval(response.content)
+            ingredients = ast.literal_eval(response_content)
         except Exception:
             raise HTTPException(status_code=500, detail="Could not parse ingredients list from Gemini response.")
 
@@ -212,6 +220,8 @@ def chat_endpoint(request: ChatRequest):
                 matches = smart_ingredient_matching(ingredient, all_products)
                 ingredient_matches.append(IngredientMatch(ingredient=ingredient, matches=matches))
         return ChatResponse(ingredients=ingredient_matches)
+    except HTTPException:
+        raise  # Re-raise HTTP exceptions (including our "Not a food item" error)
     except Exception as e:
         print("LangChain Gemini error:", e)
         raise HTTPException(status_code=500, detail=f"LangChain Gemini error: {e}")
