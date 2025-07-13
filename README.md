@@ -38,6 +38,7 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
    cd ../fastapi_server
    python3 -m venv venv
    source venv/bin/activate
+   cd..
    pip install -r requirements.txt
    ```
 
@@ -52,6 +53,7 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
 4. **Start the FastAPI backend**
 
    ```bash
+   cd fastapi_server
    uvicorn main:app --reload
    ```
 
