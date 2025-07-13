@@ -50,6 +50,7 @@ export default function ChatWindow({
 
     const userMessage = { sender: "user" as const, text: input };
     setMessages((prev) => [...prev, userMessage]);
+    setInput(""); // Clear input immediately when user sends message
     setLoading(true);
 
     try {
@@ -76,13 +77,21 @@ export default function ChatWindow({
         ]);
       }
     } catch (err) {
+      const errorMessage = "Sorry, I couldn't process your request.";
       setMessages((prev) => [
         ...prev,
-        { sender: "ai", text: "Sorry, I couldn't process your request." },
+        { sender: "ai", text: errorMessage },
       ]);
+      
+      // After 500ms, show the recovery message
+      setTimeout(() => {
+        setMessages((prev) => [
+          ...prev,
+          { sender: "ai", text: "What do you want to make today?" },
+        ]);
+      }, 500);
     } finally {
       setLoading(false);
-      setInput("");
     }
   };
 
