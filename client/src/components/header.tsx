@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, User, ShoppingCart, MessageCircle } from "lucide-react";
+import { Search, User, ShoppingCart, ChefHat } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import ChatWindow from "@/components/chat/ChatWindow";
@@ -69,12 +69,12 @@ export default function Header({
 
               <Button
                 type="button"
-                variant="ghost"
-                size="sm"
-                className="ml-2 text-gray-600 hover:text-walmart-blue"
+                variant="outline"
+                className="ml-2 px-4 py-2 h-10 bg-walmart-blue text-white hover:bg-walmart-dark-blue border-walmart-blue flex items-center space-x-2"
                 onClick={toggleChat}
               >
-                <MessageCircle size={20} />
+                <ChefHat size={16} />
+                <span className="text-sm font-medium">Recipe Master</span>
               </Button>
             </div>
 
