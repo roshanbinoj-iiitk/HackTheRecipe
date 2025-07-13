@@ -33,7 +33,7 @@ export default function ChatWindow({
   useEffect(() => {
     const timer = setTimeout(() => {
       setMessages([{ sender: "ai", text: "What do you want to make today?" }]);
-    }, 2000); // 2 seconds delay
+    }, 500); // 2 seconds delay
     return () => clearTimeout(timer);
   }, []);
   const [input, setInput] = useState("");
@@ -101,6 +101,20 @@ export default function ChatWindow({
           </button>
         </div>
         <div className="flex-1 p-2 overflow-y-auto space-y-2 text-sm flex flex-col">
+          {/* Show chat history above ingredient confirmation */}
+          {messages.map((msg, idx) => (
+            <div
+              key={idx}
+              className={`p-2 rounded-md max-w-[80%] ${
+                msg.sender === "user"
+                  ? "bg-walmart-blue text-white self-end ml-auto"
+                  : "bg-gray-100 text-gray-800 self-start mr-auto"
+              }`}
+            >
+              {msg.text}
+            </div>
+          ))}
+          {/* Ingredient confirmation content below */}
           <div className="mb-2 font-semibold">
             Ingredient:{" "}
             <span className="text-walmart-blue">{ing.ingredient}</span>
@@ -114,8 +128,12 @@ export default function ChatWindow({
                 (p) => p._id === match.id || p.id === match.id
               );
               // Try different possible image field names
-              const imageUrl = product?.image || product?.imageUrl || product?.img || product?.picture;
-              
+              const imageUrl =
+                product?.image ||
+                product?.imageUrl ||
+                product?.img ||
+                product?.picture;
+
               return (
                 <li
                   key={match.id}
@@ -130,19 +148,29 @@ export default function ChatWindow({
                         className="w-20 h-20 object-cover rounded-md border shadow-sm"
                         onError={(e) => {
                           const target = e.currentTarget;
-                          target.src = 'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yOCAzMkMzMC4yMDkxIDMyIDMyIDMwLjIwOTEgMzIgMjhDMzIgMjUuNzkwOSAzMC4yMDkxIDI0IDI4IDI0QzI1Ljc5MDkgMjQgMjQgMjUuNzkwOSAyNCAyOCMyNCAzMC4yMDkxIDI1Ljc5MDkgMzIgMjggMzJaIiBmaWxsPSIjOUI5QjlCIi8+CjxwYXRoIGQ9Ik0yMCA0NEw2MCA0NEw1MiAzNkw0NCA0NEwyOCAyOEwyMCA0NFoiIGZpbGw9IiM5QjlCOUIiLz4KPC9zdmc+';
-                          target.className = "w-20 h-20 object-cover rounded-md border bg-gray-100";
+                          target.src =
+                            "data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iODAiIGhlaWdodD0iODAiIHZpZXdCb3g9IjAgMCA4MCA4MCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjgwIiBoZWlnaHQ9IjgwIiBmaWxsPSIjRjNGNEY2Ii8+CjxwYXRoIGQ9Ik0yOCAzMkMzMC4yMDkxIDMyIDMyIDMwLjIwOTEgMzIgMjhDMzIgMjUuNzkwOSAzMC4yMDkxIDI0IDI4IDI0QzI1Ljc5MDkgMjQgMjQgMjUuNzkwOSAyNCAyOCMyNCAzMC4yMDkxIDI1Ljc5MDkgMzIgMjggMzJaIiBmaWxsPSIjOUI5QjlCIi8+CjxwYXRoIGQ9Ik0yMCA0NEw2MCA0NEw1MiAzNkw0NCA0NEwyOCAyOEwyMCA0NFoiIGZpbGw9IiM5QjlCOUIiLz4KPC9zdmc+";
+                          target.className =
+                            "w-20 h-20 object-cover rounded-md border bg-gray-100";
                         }}
                       />
                     ) : (
                       <div className="w-20 h-20 bg-gray-100 rounded-md border flex items-center justify-center">
-                        <svg className="w-8 h-8 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
-                          <path fillRule="evenodd" d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z" clipRule="evenodd" />
+                        <svg
+                          className="w-8 h-8 text-gray-400"
+                          fill="currentColor"
+                          viewBox="0 0 20 20"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M4 3a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V5a2 2 0 00-2-2H4zm12 12H4l4-8 3 6 2-4 3 6z"
+                            clipRule="evenodd"
+                          />
                         </svg>
                       </div>
                     )}
                   </div>
-                  
+
                   {/* Product details */}
                   <div className="flex-1 min-w-0">
                     <h4 className="font-semibold text-sm leading-tight mb-1 text-gray-900">
@@ -208,6 +236,12 @@ export default function ChatWindow({
             onClick={() => {
               setIngredientMatches([]);
               setCurrentIngredientIdx(0);
+              setMessages([]);
+              setTimeout(() => {
+                setMessages([
+                  { sender: "ai", text: "What do you want to make today?" },
+                ]);
+              }, 500);
             }}
           >
             Start Over

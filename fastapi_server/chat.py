@@ -56,7 +56,7 @@ def get_ingredient_synonyms():
         'potato': ['potato', 'aloo', 'batata'],
         'rice': ['rice', 'chawal', 'basmati rice', 'jasmine'],
         'oil': ['oil', 'tel', 'cooking oil'],
-        'salt': ['salt', 'namak', 'sea salt', 'rock salt'],
+        'salt': ['salt', 'namak', 'sea salt', 'rock salt', 'iodised'],
         'sugar': ['sugar', 'cheeni', 'shakkar'],
         'milk': ['milk', 'doodh', 'dairy'],
         'butter': ['butter', 'makhan'],
@@ -178,40 +178,90 @@ def smart_ingredient_matching(ingredient, products):
     scored_matches.sort(key=lambda x: x[1], reverse=True)
     return [match[0] for match in scored_matches[:8]] or []
 
+def get_db_connection():
+    db_path = Path(__file__).parent.parent / "fastapi_server" / "products.db"
+    conn = sqlite3.connect(db_path)
+    return conn
+
+def create_cache_table():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS ingredient_cache (
+            dish_name TEXT PRIMARY KEY,
+            ingredients TEXT
+        )
+    """)
+    conn.commit()
+    conn.close()
+
+def get_cached_ingredients(dish_name):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT ingredients FROM ingredient_cache WHERE dish_name = ?", (dish_name,))
+    row = cursor.fetchone()
+    conn.close()
+    if row:
+        try:
+            return ast.literal_eval(row[0])
+        except Exception:
+            return None
+    return None
+
+def set_cached_ingredients(dish_name, ingredients):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute(
+        "INSERT OR REPLACE INTO ingredient_cache (dish_name, ingredients) VALUES (?, ?)",
+        (dish_name, str(ingredients))
+    )
+    conn.commit()
+    conn.close()
+
+# Ensure cache table exists at startup
+create_cache_table()
+
 @router.post("", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
     api_key = os.getenv("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="Gemini API key not set")
     try:
-        llm = ChatGoogleGenerativeAI(
-            model="gemini-2.5-flash",
-            google_api_key=api_key,
-            temperature=0,
-        )
-        prompt = (
-            f"Analyze the following request: '{request.message}'. "
-            "If this is asking for ingredients to make a food item, recipe, dish, or any edible item, "
-            "then list the ingredients needed as a list of items enclosed in [ ] with each item in double quotes. "
-            "For each ingredient, only include it if it is a real food ingredient. "
-            "Exclude water as an ingredient and use basic ingredient names (e.g., 'chicken' not 'chicken breast'). "
-            "However, if the request is NOT about food, cooking, recipes, or any edible items "
-            "(e.g., if it's about objects, places, people, abstract concepts, non-edible items, etc.), "
-            "then respond with exactly: 'NON_FOOD_ITEM_DETECTED'. "
-            "Do not return anything else in either case."
-        )
+        normalized_message = request.message.strip().lower()
+        # Check cache first
+        ingredients = get_cached_ingredients(normalized_message)
+        if ingredients is None:
+            llm = ChatGoogleGenerativeAI(
+                model="gemini-2.5-flash",
+                google_api_key=api_key,
+                temperature=0,
+            )
+            prompt = (
+                f"Analyze the following request: '{request.message}'. "
+                "If this is asking for ingredients to make a food item, recipe, dish, or any edible item, "
+                "then list the ingredients needed as a list of items enclosed in [ ] with each item in double quotes. "
+                "For each ingredient, only include it if it is a real food ingredient. "
+                "Exclude water as an ingredient and use basic ingredient names (e.g., 'chicken' not 'chicken breast'). "
+                "However, if the request is NOT about food, cooking, recipes, or any edible items "
+                "(e.g., if it's about objects, places, people, abstract concepts, non-edible items, etc.), "
+                "then respond with exactly: 'NON_FOOD_ITEM_DETECTED'. "
+                "Do not return anything else in either case."
+            )
 
-        response = llm.invoke(prompt)
-        response_content = response.content.strip()
-        
-        # Check if LLM detected a non-food item
-        if response_content == "NON_FOOD_ITEM_DETECTED":
-            raise HTTPException(status_code=400, detail="Not a food item")
-        
-        try:
-            ingredients = ast.literal_eval(response_content)
-        except Exception:
-            raise HTTPException(status_code=500, detail="Could not parse ingredients list from Gemini response.")
+            response = llm.invoke(prompt)
+            response_content = response.content.strip()
+            
+            # Check if LLM detected a non-food item
+            if response_content == "NON_FOOD_ITEM_DETECTED":
+                raise HTTPException(status_code=400, detail="Not a food item")
+            
+            try:
+                ingredients = ast.literal_eval(response_content)
+            except Exception:
+                raise HTTPException(status_code=500, detail="Could not parse ingredients list from Gemini response.")
+
+            # Store in cache
+            set_cached_ingredients(normalized_message, ingredients)
 
         all_products = get_all_products()
         ingredient_matches = []
@@ -224,4 +274,4 @@ def chat_endpoint(request: ChatRequest):
         raise  # Re-raise HTTP exceptions (including our "Not a food item" error)
     except Exception as e:
         print("LangChain Gemini error:", e)
-        raise HTTPException(status_code=500, detail=f"LangChain Gemini error: {e}")
+        raise HTTPException(status_code=500, detail=f"LangChain Gemini\u00a0error:\u00a0{e}")
