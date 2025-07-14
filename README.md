@@ -1,20 +1,33 @@
 # Walmart Product Catalog
 
-A full-stack e-commerce product catalog built with React, Express.js, and TypeScript. Features 8000+ grocery products with search, filtering, and shopping cart functionality.
+## AI-Powered Recipe Assistant
+
+An AI-powered recipe assistant that auto-generates grocery lists from recipe names and adds items to the cart.
+
+### The Problem
+
+Customers often forget essential ingredients while shopping for recipes, leading to frustration and extra trips. While they may plan meals in advance, they either miss listing all items or forget minor ones like spices, condiments, or rarely used ingredients. This results in incomplete shopping and a poor cooking experience. The issue affects all types of customers, especially working individuals and students, and usually occurs during online grocery planning or in-store visits without a proper checklist.
+
+### The Solution
+
+We’re building an AI-based recipe assistant that takes the name of any dish (e.g., “lasagna” or “paneer butter masala”) and automatically extracts the full list of ingredients required using NLP and a recipe database. It cross-checks users’ current pantry items and compiles a complete grocery list, directly integrating it with the cart for quick checkout.
+
+This is a full-stack e-commerce product catalog built with React (frontend) and FastAPI (backend). Features 27000+ grocery products with search, filtering, and shopping cart functionality.
 
 ## Features
 
+- 💬 **Chat**: AI-powered recipe assistant for grocery list generation
 - 🛒 **Shopping Cart**: Add/remove items, adjust quantities, persistent storage
 - 🔍 **Search**: Real-time product search by name, brand, or category
 - 🏷️ **Filtering**: Category-based filtering and price sorting
 - 📱 **Responsive**: Mobile-first design with Tailwind CSS
 - 🎨 **Walmart Theme**: Blue/yellow branding with modern UI
-- 💾 **Data Persistence**: Local storage for cart, in-memory product data
+- 💾 **Data Persistence**: Local storage for cart, in-
 
 ## Tech Stack
 
 - **Frontend**: React 18, TypeScript, Vite, Tailwind CSS
-- **Backend**: Express.js, TypeScript
+- **Backend**: FastAPI (Python 3.10)
 - **UI Components**: Shadcn/ui (Radix UI primitives)
 - **State Management**: TanStack Query, React hooks
 - **Styling**: Tailwind CSS with custom Walmart theme
@@ -28,47 +41,67 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
 
 ### Installation
 
-1. **Clone or download this project**
+#### Frontend (React)
 
-2. **Install dependencies for both client and server**
+1. **Navigate to the client directory and install dependencies**
 
    ```bash
    cd client
    npm install
-   cd ../fastapi_server
-   python3 -m venv venv
-   source venv/bin/activate
-   cd..
+   ```
+
+2. **Start the React development server**
+   ```bash
+   npm run dev
+   ```
+   The frontend will be available at `http://localhost:5173`
+
+---
+
+#### Backend (FastAPI)
+
+1. **Return to the project root and set up Python environment**
+
+   Using Conda:
+
+   ```bash
+   cd ..
+   conda create -p venv python=3.10 -y
+   conda activate ./venv
    pip install -r requirements.txt
    ```
 
-3. **Set up environment variables for Gemini API**
+   **Alternative using Python venv:**
 
-   Create a `.env` file in the `fastapi_server` directory with:
-
+   ```bash
+   cd ..
+   python -m venv venv
+   # On Linux/macOS:
+   source venv/bin/activate
+   # On Windows:
+   venv\Scripts\activate
+   pip install -r requirements.txt
    ```
-   GEMINI_API_KEY=your-gemini-api-key
-   ```
 
-4. **Start the FastAPI backend**
+2. **Set up Gemini API key**
 
+   - Create a `.env` file in the `fastapi_server` directory with:
+     ```
+     GEMINI_API_KEY=your-gemini-api-key
+     ```
+
+3. **Start the FastAPI backend**
    ```bash
    cd fastapi_server
    uvicorn main:app --reload
    ```
-
    The API will be available at `http://localhost:8000`
 
-5. **Start the React development server**
+---
 
-   ```bash
-   npm run dev
-   ```
+#### Access the App
 
-   The frontend will be available at `http://localhost:5000`
-
-6. **Open your browser**
-   Navigate to `http://localhost:5000` to use the app.
+- Open your browser and navigate to `http://localhost:5173` to use
 
 ## Project Structure
 
@@ -79,11 +112,13 @@ A full-stack e-commerce product catalog built with React, Express.js, and TypeSc
 │   │   ├── hooks/          # Custom React hooks
 │   │   ├── pages/          # Page components
 │   │   └── lib/            # Utilities
-├── server/                 # Express backend
-│   ├── routes.ts          # API routes
-│   ├── storage.ts         # Data management
-│   └── index.ts           # Server entry point
-├── shared/                 # Shared types/schemas
+├── fastapi_server/         # FastAPI backend (Python)
+│   ├── main.py             # API entry point
+│   ├── cart.py, chat.py    # Backend modules
+│   ├── models.py           # Data models
+│   ├── storage.py          # Data management
+│   ├── products.db         # (optional) SQLite DB
+│   └── bigbasket_products.csv # Product data
 └── attached_assets/        # Product data (CSV)
 ```
 
