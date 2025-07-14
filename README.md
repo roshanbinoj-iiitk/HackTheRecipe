@@ -132,9 +132,10 @@ This is a full-stack e-commerce product catalog built with React (frontend) and 
 
 ### Adding Your Own Products
 
-1. Replace `attached_assets/bigbasket_products.csv` with your product data
-2. Ensure CSV format matches: ProductID, ProductName, Brand, Price, DiscountPrice, Image_Url, Category, SubCategory, Absolute_Url
-3. Restart the server to load new data
+1. Place your product CSV file in the `attached_assets/` directory.
+2. Make sure your CSV columns are: ProductID, ProductName, Brand, Price, DiscountPrice, Image_Url, Category, SubCategory, Absolute_Url.
+3. Update the filename in the backend config or replace `bigbasket_products.csv` with your file.
+4. Delete products.db and restart the backend server to load the new product data.
 
 ### Theming
 
@@ -148,19 +149,15 @@ Edit `client/src/index.css` to customize colors:
 }
 ```
 
-### Database Integration
-
-The project currently uses in-memory storage. To add database persistence:
-
-1. Uncomment MongoDB/PostgreSQL code in `server/storage.ts`
-2. Install database dependencies
-3. Configure connection string
-
 ## API Endpoints
 
-- `GET /api/products` - Get all products
-- `GET /api/products/search?q={query}` - Search products
-- `GET /api/products/category/{category}` - Filter by category
+- `GET /api/products` — Returns all products in the catalog.
+- `GET /api/products/search?q={query}` — Searches products by name, brand, or category.
+- `GET /api/products/category/{category}` — Returns products filtered by category.
+- `POST /api/cart` — Adds an item to the shopping cart.
+- `GET /api/cart` — Retrieves all items in the cart.
+- `PUT /api/cart` — Updates quantity of an item in the cart.
+- `POST /api/chat` — Sends a message to the AI assistant for recipe
 
 ## Deployment
 
@@ -170,18 +167,27 @@ The project currently uses in-memory storage. To add database persistence:
 npm run build
 npm run start
 ```
+The app will be available at `http://localhost:5173` (frontend) and `http://localhost:8000` (backend).
 
 ### Cloud Deployment
 
-This project is ready for deployment on:
+You can deploy this project on:
 
-- Vercel
-- Netlify
-- Railway
-- Heroku
-- Any Node.js hosting platform
+- Vercel (frontend)
+- Netlify (frontend)
+- Railway (fullstack)
+- Heroku (backend)
+- Any Node.js or Python hosting platform
 
+**Backend:**  
+Deploy the FastAPI server using Uvicorn or Gunicorn.  
+Set your environment variables (e.g., `GEMINI_API_KEY`) in your cloud provider.
+
+**Frontend:**  
+Deploy the React app using Vercel, Netlify, or similar platforms.  
 Set `NODE_ENV=production` for production builds.
+
+Refer to your cloud provider's documentation for
 
 ## Contributing
 
