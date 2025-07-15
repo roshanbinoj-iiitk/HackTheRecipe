@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import type { Product } from "@shared/schema";
+import { API_BASE } from "@/lib/apiBase";
 
 export interface CartItem {
   product: any; // expects an object with _id and discountPrice
@@ -11,7 +12,7 @@ export function useCart() {
 
   // Fetch cart from backend on mount
   useEffect(() => {
-    fetch("/api/cart")
+    fetch(`${API_BASE}/api/cart`)
       .then((res) => res.json())
       .then((data) => {
         setCartItems(Array.isArray(data) ? data : []);
@@ -29,12 +30,12 @@ export function useCart() {
       console.error("Product object is missing or invalid:", product);
       return;
     }
-    await fetch("/api/cart", {
+    await fetch(`${API_BASE}/api/cart`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ product_id: productId, quantity }),
     });
-    const res = await fetch("/api/cart");
+    const res = await fetch(`${API_BASE}/api/cart`);
     const data = await res.json();
     setCartItems(Array.isArray(data) ? data : []);
   };
@@ -44,12 +45,12 @@ export function useCart() {
       console.error("Product ID is missing or invalid:", productId);
       return;
     }
-    await fetch("/api/cart", {
+    await fetch(`${API_BASE}/api/cart`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ product_id: productId, quantity }),
     });
-    const res = await fetch("/api/cart");
+    const res = await fetch(`${API_BASE}/api/cart`);
     const data = await res.json();
     setCartItems(Array.isArray(data) ? data : []);
   };
@@ -59,10 +60,10 @@ export function useCart() {
       console.error("Product ID is missing or invalid:", productId);
       return;
     }
-    await fetch(`http://localhost:8000/api/cart/${productId}`, {
+    await fetch(`${API_BASE}/api/cart/${productId}`, {
       method: "DELETE",
     });
-    const res = await fetch("/api/cart");
+    const res = await fetch(`${API_BASE}/api/cart`);
     const data = await res.json();
     setCartItems(Array.isArray(data) ? data : []);
   };

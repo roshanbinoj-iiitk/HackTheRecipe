@@ -54,7 +54,7 @@ export default function ChatWindow({
     setLoading(true);
 
     try {
-      const res = await fetch("http://localhost:8000/api/chat", {
+      const res = await fetch(`${API_BASE}/api/chat`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: input }),
@@ -78,11 +78,8 @@ export default function ChatWindow({
       }
     } catch (err) {
       const errorMessage = "Sorry, I couldn't process your request.";
-      setMessages((prev) => [
-        ...prev,
-        { sender: "ai", text: errorMessage },
-      ]);
-      
+      setMessages((prev) => [...prev, { sender: "ai", text: errorMessage }]);
+
       // After 500ms, show the recovery message
       setTimeout(() => {
         setMessages((prev) => [

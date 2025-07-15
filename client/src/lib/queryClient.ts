@@ -1,4 +1,5 @@
 import { QueryClient, QueryFunction } from "@tanstack/react-query";
+import { API_BASE } from "./apiBase";
 
 async function throwIfResNotOk(res: Response) {
   if (!res.ok) {
@@ -27,7 +28,7 @@ export async function apiRequest(
 }
 
 type UnauthorizedBehavior = "returnNull" | "throw";
-const API_BASE = "http://localhost:8000";
+// ...existing code...
 
 export const getQueryFn: <T>(options: {
   on401: UnauthorizedBehavior;
