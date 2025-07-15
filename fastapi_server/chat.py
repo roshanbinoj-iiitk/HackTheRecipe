@@ -223,7 +223,7 @@ create_cache_table()
 
 @router.post("", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GEMINI_API_KEY") | os.environ.get("GEMINI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="Gemini API key not set")
     try:
