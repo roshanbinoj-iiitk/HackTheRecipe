@@ -28,6 +28,9 @@ class ChatResponse(BaseModel):
 def get_all_products():
     products = []
     csv_path = Path(__file__).parent.parent / "attached_assets" / "bigbasket_products.csv"
+    if not csv_path.exists():
+        # Fallback to same folder as chat.py
+        csv_path = Path(__file__).parent / "bigbasket_products.csv"
     with open(csv_path, newline='', encoding='utf-8') as csvfile:
         reader = csv.DictReader(csvfile)
         for row in reader:

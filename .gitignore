@@ -11,3 +11,4 @@ fastapi_server/__pycache__/
 fastapi_server/**/__pycache__/
 node_modules
 .env
+.vercel
