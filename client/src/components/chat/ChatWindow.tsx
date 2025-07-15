@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import { API_BASE } from "@/lib/apiBase";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 // @ts-ignore
@@ -59,8 +60,22 @@ export default function ChatWindow({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ message: input }),
       });
-      if (!res.ok) throw new Error("Failed to get reply");
-      const data = await res.json();
+
+      let data;
+      let errorMessage = "Sorry, I couldn't process your request.";
+
+      if (res.ok) {
+        data = await res.json();
+      } else {
+        // Try to extract error message from backend
+        try {
+          const errData = await res.json();
+          errorMessage = errData.detail || errorMessage;
+        } catch {
+          errorMessage = await res.text() || errorMessage;
+        }
+        throw new Error(errorMessage);
+      }
 
       // If backend returns ingredients for confirmation
       if (data.ingredients && Array.isArray(data.ingredients)) {
@@ -77,10 +92,8 @@ export default function ChatWindow({
         ]);
       }
     } catch (err) {
-      const errorMessage = "Sorry, I couldn't process your request.";
+      const errorMessage = err?.message || "Sorry, I couldn't process your request.";
       setMessages((prev) => [...prev, { sender: "ai", text: errorMessage }]);
-
-      // After 500ms, show the recovery message
       setTimeout(() => {
         setMessages((prev) => [
           ...prev,
