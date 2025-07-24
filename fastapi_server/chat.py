@@ -27,7 +27,7 @@ class ChatResponse(BaseModel):
 
 def get_all_products():
     products = []
-    csv_path = Path(__file__).parent.parent / "attached_assets" / "bigbasket_products.csv"
+    csv_path = Path(__file__).parent / "bigbasket_products.csv"
     if not csv_path.exists():
         # Fallback to same folder as chat.py
         csv_path = Path(__file__).parent / "bigbasket_products.csv"
@@ -182,7 +182,7 @@ def smart_ingredient_matching(ingredient, products):
     return [match[0] for match in scored_matches[:8]] or []
 
 def get_db_connection():
-    db_path = Path(__file__).parent.parent / "fastapi_server" / "products.db"
+    db_path = Path(__file__).parent / "products.db"
     conn = sqlite3.connect(db_path)
     return conn
 
