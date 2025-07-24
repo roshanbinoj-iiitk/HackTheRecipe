@@ -5,6 +5,7 @@ from storage import storage
 from fastapi.middleware.cors import CORSMiddleware
 from chat import router as chat_router
 from cart import router as cart_router
+from fastapi.responses import FileResponse
 
 app = FastAPI()
 
@@ -16,6 +17,14 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+@app.get("/")
+def root():
+    return {"message": "HackTheRecipe API is running"}
+
+@app.get("/favicon.ico")
+def favicon():
+    # Optionally, serve a favicon file if you have one
+    return {"detail": "No favicon"}
 
 app.include_router(chat_router)
 
