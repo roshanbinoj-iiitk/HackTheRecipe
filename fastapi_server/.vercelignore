@@ -1,0 +1,9 @@
+products.db
+*.db
+__pycache__/
+*.pyc
+python_env/
+uploads/
+.env
+*.log
+.vscode/
