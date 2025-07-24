@@ -12,7 +12,7 @@ app = FastAPI()
 # ✅ Updated CORS: allow only the frontend origin
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173","https://hack-the-recipe-61a1pos4n-roshanbinoj-iiitks-projects.vercel.app","https://hack-the-recipe.vercel.app",],  # Your frontend origin
+    allow_origins=["http://localhost:5173","https://hack-the-recipe-61a1pos4n-roshanbinoj-iiitks-projects.vercel.app","https://hack-the-recipe.vercel.app","https://fastest-ruby.vercel.app/"],  # Your frontend origin
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
