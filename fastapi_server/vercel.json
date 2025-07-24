@@ -2,7 +2,7 @@
   "version": 2,
   "builds": [
     {
-      "src": "fastapi_server/main.py",
+      "src": "main.py",
       "use": "@vercel/python",
       "config": {
         "maxLambdaSize": "15mb"
@@ -12,7 +12,7 @@
   "routes": [
     {
       "src": "/(.*)",
-      "dest": "fastapi_server/main.py"
+      "dest": "main.py"
     }
   ]
 }
