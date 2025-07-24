@@ -24,7 +24,7 @@ def root():
 @app.get("/favicon.ico")
 def favicon():
     # Optionally, serve a favicon file if you have one
-    return {"detail": "No favicon"}
+    return FileResponse("favicon.ico", media_type="image/x-icon")
 
 app.include_router(chat_router)
 
