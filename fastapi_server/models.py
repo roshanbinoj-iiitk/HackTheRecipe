@@ -14,6 +14,13 @@ class Product(BaseModel):
     class Config:
         from_attributes = True
 
+class PaginatedProducts(BaseModel):
+    items: list[Product]
+    page: int
+    pageSize: int
+    total: int
+    hasMore: bool
+
 from sqlalchemy import Column, String, Integer
 from sqlalchemy.ext.declarative import declarative_base
 

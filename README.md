@@ -151,9 +151,10 @@ Edit `client/src/index.css` to customize colors:
 
 ## API Endpoints
 
-- `GET /api/products` — Returns all products in the catalog.
-- `GET /api/products/search?q={query}` — Searches products by name, brand, or category.
-- `GET /api/products/category/{category}` — Returns products filtered by category.
+- `GET /api/products` — Paginated products. Query params: `page`, `page_size`, `q`, `category`, `sort`.
+- `GET /api/products/search?q={query}` — Paginated search results. Query params: `page`, `page_size`, `sort`.
+- `GET /api/products/category/{category}` — Paginated category results. Query params: `page`, `page_size`, `sort`.
+- `GET /api/products/categories` — Distinct product categories.
 - `POST /api/cart` — Adds an item to the shopping cart.
 - `GET /api/cart` — Retrieves all items in the cart.
 - `PUT /api/cart` — Updates quantity of an item in the cart.

@@ -1,8 +1,8 @@
 import csv
-from sqlalchemy import create_engine, text
+from typing import List
+from sqlalchemy import create_engine, text, cast, Float, func
 from sqlalchemy.orm import sessionmaker
 from models import ProductDB, Base
-from typing import List
 
 DATABASE_URL = "sqlite:///./products.db"
 
@@ -50,16 +50,44 @@ class DBStorage:
 
     def search_products(self, query: str) -> List[ProductDB]:
         with SessionLocal() as session:
-            like_query = f"%{query.lower()}%"
-            return session.query(ProductDB).filter(
-                ProductDB.productName.ilike(like_query) |
-                ProductDB.brand.ilike(like_query) |
-                ProductDB.category.ilike(like_query)
-            ).all()
+            base_query = self._build_products_query(session, query, None)
+            base_query = self._apply_sort(base_query, "name")
+            return base_query.all()
 
     def get_products_by_category(self, category: str) -> List[ProductDB]:
         with SessionLocal() as session:
-            return session.query(ProductDB).filter(ProductDB.category == category).all()
+            base_query = self._build_products_query(session, None, category)
+            base_query = self._apply_sort(base_query, "name")
+            return base_query.all()
+
+    def get_products_page(
+        self,
+        page: int,
+        page_size: int,
+        q: str | None = None,
+        category: str | None = None,
+        sort: str | None = None,
+    ):
+        with SessionLocal() as session:
+            base_query = self._build_products_query(session, q, category)
+            total = base_query.count()
+            sorted_query = self._apply_sort(base_query, sort)
+            items = (
+                sorted_query.offset((page - 1) * page_size)
+                .limit(page_size)
+                .all()
+            )
+            return items, total
+
+    def get_categories(self) -> List[str]:
+        with SessionLocal() as session:
+            rows = (
+                session.query(ProductDB.category)
+                .distinct()
+                .order_by(ProductDB.category)
+                .all()
+            )
+            return [row[0] for row in rows if row[0]]
 
     def create_product(self, product_data) -> ProductDB:
         with SessionLocal() as session:
@@ -81,8 +109,6 @@ class DBStorage:
             """))
             session.commit()
     
-    from sqlalchemy import text
-
     def add_to_cart(self, product_id: str, quantity: int):
         with SessionLocal() as session:
             # Check if item already in cart
@@ -141,5 +167,30 @@ class DBStorage:
                 {"product_id": product_id}
             )
             session.commit()
+
+    def _build_products_query(self, session, q: str | None, category: str | None):
+        query = session.query(ProductDB)
+        if q:
+            like_query = f"%{q.lower()}%"
+            query = query.filter(
+                ProductDB.productName.ilike(like_query)
+                | ProductDB.brand.ilike(like_query)
+                | ProductDB.category.ilike(like_query)
+            )
+        if category:
+            query = query.filter(ProductDB.category == category)
+        return query
+
+    def _apply_sort(self, query, sort: str | None):
+        if sort == "price-low":
+            return query.order_by(cast(ProductDB.discountPrice, Float).asc())
+        if sort == "price-high":
+            return query.order_by(cast(ProductDB.discountPrice, Float).desc())
+        if sort == "discount":
+            price = cast(ProductDB.price, Float)
+            discount = cast(ProductDB.discountPrice, Float)
+            discount_ratio = (price - discount) / func.nullif(price, 0)
+            return query.order_by(discount_ratio.desc())
+        return query.order_by(ProductDB.productName.asc())
 
 storage = DBStorage()

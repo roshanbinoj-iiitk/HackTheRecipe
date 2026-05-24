@@ -8,23 +8,16 @@ import type { Product } from "../../../shared/schema";
 interface ChatWindowProps {
   onClose: () => void;
   addToCart?: (product: Product, quantity?: number) => void; // Now expects full product
-  products: Product[]; // New prop
 }
 
 interface IngredientMatch {
   ingredient: string;
-  matches: {
-    id: string;
-    productName: string;
-    price: string;
-    quantity: string;
-  }[];
+  matches: Product[];
 }
 
 export default function ChatWindow({
   onClose,
   addToCart,
-  products,
 }: ChatWindowProps) {
   const { toast } = useToast();
   const [messages, setMessages] = useState<
@@ -143,15 +136,8 @@ export default function ChatWindow({
           )}
           <ul>
             {ing.matches.map((match) => {
-              const product = products.find(
-                (p) => p._id === match.id || p.id === match.id
-              );
-              // Try different possible image field names
-              const imageUrl =
-                product?.image ||
-                product?.imageUrl ||
-                product?.img ||
-                product?.picture;
+              const imageUrl = match.imageUrl;
+              const displayPrice = match.discountPrice || match.price;
 
               return (
                 <li
@@ -196,19 +182,19 @@ export default function ChatWindow({
                       {match.productName}
                     </h4>
                     <div className="text-xs text-gray-600 mb-2">
-                      <span className="font-medium">₹{match.price}</span>
+                      <span className="font-medium">₹{displayPrice}</span>
                       <span className="mx-1">•</span>
-                      <span>{match.quantity}</span>
+                      <span>{match.brand}</span>
                     </div>
                     <Button
                       size="sm"
                       className="text-xs px-3 py-1 h-7"
                       onClick={() => {
-                        if (addToCart && product) {
-                          addToCart(product, 1);
+                        if (addToCart) {
+                          addToCart(match, 1);
                           toast({
                             title: "Added to cart",
-                            description: `${product.productName} has been added to your cart.`,
+                            description: `${match.productName} has been added to your cart.`,
                             duration: 2000,
                           });
                         }

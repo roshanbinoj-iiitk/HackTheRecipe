@@ -18,14 +18,30 @@ router = APIRouter(prefix="/api/chat", tags=["Chat"])
 class ChatRequest(BaseModel):
     message: str
 
+class ProductMatch(BaseModel):
+    id: str
+    productName: str
+    price: str
+    discountPrice: str
+    brand: str
+    imageUrl: str
+    category: str
+    subCategory: str
+    absoluteUrl: str
+
 class IngredientMatch(BaseModel):
     ingredient: str
-    matches: list
+    matches: list[ProductMatch]
 
 class ChatResponse(BaseModel):
     ingredients: list[IngredientMatch]
 
+_PRODUCTS_CACHE = None
+
 def get_all_products():
+    global _PRODUCTS_CACHE
+    if _PRODUCTS_CACHE is not None:
+        return _PRODUCTS_CACHE
     products = []
     csv_path = Path(__file__).parent / "bigbasket_products.csv"
     if not csv_path.exists():
@@ -45,6 +61,7 @@ def get_all_products():
                 "subCategory": row["SubCategory"],
                 "absoluteUrl": row["Absolute_Url"],
             })
+    _PRODUCTS_CACHE = products
     return products
 
 def simple_tokenize(text):

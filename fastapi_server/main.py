@@ -1,6 +1,6 @@
 from fastapi import FastAPI, HTTPException, Query
 from typing import List
-from models import Product, ProductDB
+from models import Product, PaginatedProducts
 from storage import storage
 from fastapi.middleware.cors import CORSMiddleware
 from chat import router as chat_router
@@ -30,17 +30,76 @@ app.include_router(chat_router)
 
 app.include_router(cart_router)
 
-@app.get("/api/products", response_model=List[Product])
-def get_all_products():
-    return [Product.model_validate(p) for p in storage.get_all_products()]
+@app.get("/api/products", response_model=PaginatedProducts)
+def get_products(
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    q: str | None = None,
+    category: str | None = None,
+    sort: str | None = None,
+):
+    items, total = storage.get_products_page(
+        page=page,
+        page_size=page_size,
+        q=q,
+        category=category,
+        sort=sort,
+    )
+    return PaginatedProducts(
+        items=[Product.model_validate(p) for p in items],
+        page=page,
+        pageSize=page_size,
+        total=total,
+        hasMore=page * page_size < total,
+    )
 
-@app.get("/api/products/search", response_model=List[Product])
-def search_products(q: str = Query(...)):
-    return [Product.model_validate(p) for p in storage.search_products(q)]
+@app.get("/api/products/search", response_model=PaginatedProducts)
+def search_products(
+    q: str = Query(...),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    sort: str | None = None,
+):
+    items, total = storage.get_products_page(
+        page=page,
+        page_size=page_size,
+        q=q,
+        sort=sort,
+    )
+    return PaginatedProducts(
+        items=[Product.model_validate(p) for p in items],
+        page=page,
+        pageSize=page_size,
+        total=total,
+        hasMore=page * page_size < total,
+    )
 
-@app.get("/api/products/category/{category}", response_model=List[Product])
-def get_products_by_category(category: str):
-    return [Product.model_validate(p) for p in storage.get_products_by_category(category)]
+@app.get("/api/products/category/{category}", response_model=PaginatedProducts)
+def get_products_by_category(
+    category: str,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=200),
+    q: str | None = None,
+    sort: str | None = None,
+):
+    items, total = storage.get_products_page(
+        page=page,
+        page_size=page_size,
+        q=q,
+        category=category,
+        sort=sort,
+    )
+    return PaginatedProducts(
+        items=[Product.model_validate(p) for p in items],
+        page=page,
+        pageSize=page_size,
+        total=total,
+        hasMore=page * page_size < total,
+    )
+
+@app.get("/api/products/categories", response_model=List[str])
+def get_product_categories():
+    return storage.get_categories()
 
 # @app.post("/api/products", response_model=ProductDB)
 # def create_product(product: InsertProduct):

@@ -3,7 +3,6 @@ import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/header";
 import ProductCard from "@/components/product-card";
 import CartSidebar from "@/components/cart-sidebar";
-import { Button } from "@/components/ui/button";
 import {
   Select,
   SelectContent,
@@ -11,10 +10,27 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationEllipsis,
+  PaginationItem,
+  PaginationLink,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
 import type { Product } from "@shared/schema";
+
+type PaginatedProducts = {
+  items: Product[];
+  page: number;
+  pageSize: number;
+  total: number;
+  hasMore: boolean;
+};
 
 export default function Home() {
   const [searchQuery, setSearchQuery] = useState("");
@@ -34,62 +50,51 @@ export default function Home() {
     getCartCount,
   } = useCart();
 
+  const productQueryParams = useMemo(() => {
+    const params = new URLSearchParams();
+    params.set("page", String(currentPage));
+    params.set("page_size", String(productsPerPage));
+    if (searchQuery) {
+      params.set("q", searchQuery);
+    }
+    if (selectedCategory) {
+      params.set("category", selectedCategory);
+    }
+    if (sortOption) {
+      params.set("sort", sortOption);
+    }
+    return params.toString();
+  }, [currentPage, productsPerPage, searchQuery, selectedCategory, sortOption]);
+
+  const productsUrl = `/api/products?${productQueryParams}`;
+
   const {
-    data: products = [],
+    data: productsData,
     isLoading,
+    isFetching,
     error,
-  } = useQuery<Product[]>({
-    queryKey: ["/api/products"],
+  } = useQuery<PaginatedProducts>({
+    queryKey: [productsUrl],
+    keepPreviousData: true,
   });
 
-  // Get unique categories
-  const categories = useMemo(() => {
-    return Array.from(new Set(products.map((p) => p.category))).sort();
-  }, [products]);
+  const { data: categories = [] } = useQuery<string[]>({
+    queryKey: ["/api/products/categories"],
+  });
 
-  // Filter and sort products
-  const filteredAndSortedProducts = useMemo(() => {
-    let filtered = products.filter((product) => {
-      const matchesSearch =
-        product.productName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        product.brand.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchesCategory =
-        !selectedCategory || product.category === selectedCategory;
-      return matchesSearch && matchesCategory;
-    });
+  const products = productsData?.items ?? [];
+  const totalProducts = productsData?.total ?? 0;
+  const totalPages = Math.max(1, Math.ceil(totalProducts / productsPerPage));
 
-    // Sort products
-    filtered.sort((a, b) => {
-      switch (sortOption) {
-        case "price-low":
-          return parseFloat(a.discountPrice) - parseFloat(b.discountPrice);
-        case "price-high":
-          return parseFloat(b.discountPrice) - parseFloat(a.discountPrice);
-        case "discount":
-          const discountA =
-            (parseFloat(a.price) - parseFloat(a.discountPrice)) /
-            parseFloat(a.price);
-          const discountB =
-            (parseFloat(b.price) - parseFloat(b.discountPrice)) /
-            parseFloat(b.price);
-          return discountB - discountA;
-        default:
-          return a.productName.localeCompare(b.productName);
-      }
-    });
-
-    return filtered;
-  }, [products, searchQuery, selectedCategory, sortOption]);
-
-  // Pagination
-  const paginatedProducts = useMemo(() => {
-    const startIndex = 0;
-    const endIndex = currentPage * productsPerPage;
-    return filteredAndSortedProducts.slice(startIndex, endIndex);
-  }, [filteredAndSortedProducts, currentPage]);
-
-  const hasMoreProducts =
-    currentPage * productsPerPage < filteredAndSortedProducts.length;
+  const pageNumbers = useMemo(() => {
+    const pages: number[] = [];
+    const start = Math.max(1, currentPage - 2);
+    const end = Math.min(totalPages, currentPage + 2);
+    for (let i = start; i <= end; i += 1) {
+      pages.push(i);
+    }
+    return pages;
+  }, [currentPage, totalPages]);
 
   const handleSearch = (query: string) => {
     setSearchQuery(query);
@@ -106,8 +111,10 @@ export default function Home() {
     setCurrentPage(1);
   };
 
-  const loadMoreProducts = () => {
-    setCurrentPage((prev) => prev + 1);
+  const handlePageChange = (page: number) => {
+    if (page !== currentPage) {
+      setCurrentPage(page);
+    }
   };
 
   if (error) {
@@ -131,7 +138,6 @@ export default function Home() {
         cartCount={getCartCount()}
         onCartClick={() => setIsCartOpen(true)}
         addToCart={addToCart}
-        products={products} // Pass products to Header
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -142,11 +148,11 @@ export default function Home() {
               Fresh Groceries & Daily Essentials
             </h1>
             <p className="text-gray-600 mt-1">
-              {isLoading
+              {isLoading || isFetching
                 ? "Loading products..."
-                : filteredAndSortedProducts.length === 0
+                : totalProducts === 0
                 ? "No products found"
-                : `Showing ${paginatedProducts.length} of ${filteredAndSortedProducts.length} products`}
+                : `Showing ${products.length} of ${totalProducts} products`}
             </p>
           </div>
 
@@ -197,7 +203,7 @@ export default function Home() {
         )}
 
         {/* No Results State */}
-        {!isLoading && filteredAndSortedProducts.length === 0 && (
+        {!isLoading && totalProducts === 0 && (
           <div className="text-center py-12">
             <Search className="mx-auto h-12 w-12 text-gray-400 mb-4" />
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -210,11 +216,11 @@ export default function Home() {
         )}
 
         {/* Product Grid */}
-        {!isLoading && paginatedProducts.length > 0 && (
+        {!isLoading && products.length > 0 && (
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-6">
-            {paginatedProducts.map((product) => (
+            {products.map((product) => (
               <ProductCard
-                key={product._id}
+                key={product._id || product.id}
                 product={product}
                 onAddToCart={addToCart}
               />
@@ -222,16 +228,97 @@ export default function Home() {
           </div>
         )}
 
-        {/* Load More Button */}
-        {!isLoading && hasMoreProducts && (
-          <div className="text-center mt-8">
-            <Button
-              onClick={loadMoreProducts}
-              className="bg-walmart-blue text-white hover:bg-walmart-dark-blue px-6 py-3 font-medium"
-            >
-              Load More Products
-            </Button>
-          </div>
+        {!isLoading && totalProducts > 0 && totalPages > 1 && (
+          <Pagination className="mt-8">
+            <PaginationContent>
+              <PaginationItem>
+                <PaginationPrevious
+                  href="#"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (currentPage > 1) {
+                      handlePageChange(currentPage - 1);
+                    }
+                  }}
+                  className={
+                    currentPage === 1 ? "pointer-events-none opacity-50" : ""
+                  }
+                />
+              </PaginationItem>
+
+              {pageNumbers[0] > 1 && (
+                <PaginationItem>
+                  <PaginationLink
+                    href="#"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      handlePageChange(1);
+                    }}
+                  >
+                    1
+                  </PaginationLink>
+                </PaginationItem>
+              )}
+
+              {pageNumbers[0] > 2 && (
+                <PaginationItem>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              )}
+
+              {pageNumbers.map((page) => (
+                <PaginationItem key={page}>
+                  <PaginationLink
+                    href="#"
+                    isActive={page === currentPage}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      handlePageChange(page);
+                    }}
+                  >
+                    {page}
+                  </PaginationLink>
+                </PaginationItem>
+              ))}
+
+              {pageNumbers[pageNumbers.length - 1] < totalPages - 1 && (
+                <PaginationItem>
+                  <PaginationEllipsis />
+                </PaginationItem>
+              )}
+
+              {pageNumbers[pageNumbers.length - 1] < totalPages && (
+                <PaginationItem>
+                  <PaginationLink
+                    href="#"
+                    onClick={(event) => {
+                      event.preventDefault();
+                      handlePageChange(totalPages);
+                    }}
+                  >
+                    {totalPages}
+                  </PaginationLink>
+                </PaginationItem>
+              )}
+
+              <PaginationItem>
+                <PaginationNext
+                  href="#"
+                  onClick={(event) => {
+                    event.preventDefault();
+                    if (currentPage < totalPages) {
+                      handlePageChange(currentPage + 1);
+                    }
+                  }}
+                  className={
+                    currentPage === totalPages
+                      ? "pointer-events-none opacity-50"
+                      : ""
+                  }
+                />
+              </PaginationItem>
+            </PaginationContent>
+          </Pagination>
         )}
       </main>
 

@@ -11,7 +11,6 @@ interface HeaderProps {
   cartCount: number;
   onCartClick: () => void;
   addToCart: (product: Product, quantity?: number) => void;
-  products: Product[]; // Pass products to header
 }
 
 export default function Header({
@@ -20,7 +19,6 @@ export default function Header({
   cartCount,
   onCartClick,
   addToCart,
-  products,
 }: HeaderProps) {
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
   const [isChatOpen, setIsChatOpen] = useState(false);
@@ -106,11 +104,7 @@ export default function Header({
       </header>
 
       {isChatOpen && (
-        <ChatWindow
-          onClose={toggleChat}
-          addToCart={addToCart}
-          products={products} // Pass products to ChatWindow
-        />
+        <ChatWindow onClose={toggleChat} addToCart={addToCart} />
       )}
     </>
   );
