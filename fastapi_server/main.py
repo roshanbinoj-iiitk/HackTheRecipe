@@ -1,3 +1,4 @@
+import os
 from fastapi import FastAPI, HTTPException, Query
 from typing import List
 from models import Product, PaginatedProducts
@@ -9,10 +10,21 @@ from fastapi.responses import FileResponse
 
 app = FastAPI()
 
-# ✅ Updated CORS: allow only the frontend origin
+# ✅ Updated CORS: allow only configured frontend origins
+raw_origins = os.getenv("ALLOWED_ORIGINS", "")
+allowed_origins = [origin.strip() for origin in raw_origins.split(",") if origin.strip()]
+
+if not allowed_origins:
+    allowed_origins = [
+        "http://localhost:5173",
+        "https://hack-the-recipe.vercel.app",
+        "https://hack-the-recipe-61a1pos4n-roshanbinoj-iiitks-projects.vercel.app",
+        "https://fastest-ruby.vercel.app",
+    ]
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["http://localhost:5173","https://hack-the-recipe-61a1pos4n-roshanbinoj-iiitks-projects.vercel.app","https://hack-the-recipe.vercel.app","https://fastest-ruby.vercel.app/"],  # Your frontend origin
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
