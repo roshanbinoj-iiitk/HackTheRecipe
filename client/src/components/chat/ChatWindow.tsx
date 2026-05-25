@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { API_BASE } from "@/lib/apiBase";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
@@ -8,6 +8,9 @@ import type { Product } from "../../../shared/schema";
 interface ChatWindowProps {
   onClose: () => void;
   addToCart?: (product: Product, quantity?: number) => void; // Now expects full product
+  demoMessage?: string;
+  demoAutoSend?: boolean;
+  demoAutoAddFirst?: boolean;
 }
 
 interface IngredientMatch {
@@ -18,15 +21,31 @@ interface IngredientMatch {
 export default function ChatWindow({
   onClose,
   addToCart,
+  demoMessage,
+  demoAutoSend,
+  demoAutoAddFirst,
 }: ChatWindowProps) {
+  const autoAddDone = useRef(false);
+  const autoAddTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const AUTO_ADD_DELAY_MS = 1100;
+  const DEMO_POINTER_SCALE = 1.5;
+  const DEMO_POINTER_TIP_X = 10;
+  const DEMO_POINTER_TIP_Y = 6;
+  const demoPointerOffsetX = DEMO_POINTER_TIP_X * (1 - DEMO_POINTER_SCALE);
+  const demoPointerOffsetY = DEMO_POINTER_TIP_Y * (1 - DEMO_POINTER_SCALE);
   const { toast } = useToast();
   const [messages, setMessages] = useState<
     { sender: "user" | "ai"; text: string }[]
   >([]);
+  const [hasAutoSent, setHasAutoSent] = useState(false);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      setMessages([{ sender: "ai", text: "What do you want to make today?" }]);
+      setMessages((prev) =>
+        prev.length > 0
+          ? prev
+          : [{ sender: "ai", text: "What do you want to make today?" }]
+      );
     }, 500); // 2 seconds delay
     return () => clearTimeout(timer);
   }, []);
@@ -39,64 +58,148 @@ export default function ChatWindow({
   );
   const [currentIngredientIdx, setCurrentIngredientIdx] = useState(0);
 
-  const handleSend = async () => {
-    if (!input.trim() || loading) return;
+  const sendMessage = useCallback(
+    async (message: string) => {
+      if (!message.trim() || loading) return;
 
-    const userMessage = { sender: "user" as const, text: input };
-    setMessages((prev) => [...prev, userMessage]);
-    setInput(""); // Clear input immediately when user sends message
-    setLoading(true);
+      const userMessage = { sender: "user" as const, text: message };
+      setMessages((prev) => [...prev, userMessage]);
+      setInput(""); // Clear input immediately when user sends message
+      setLoading(true);
 
-    try {
-      const res = await fetch(`${API_BASE}/api/chat`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: input }),
-      });
+      try {
+        const res = await fetch(`${API_BASE}/api/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message }),
+        });
 
-      let data;
-      let errorMessage = "Sorry, I couldn't process your request.";
+        let data;
+        let errorMessage = "Sorry, I couldn't process your request.";
 
-      if (res.ok) {
-        data = await res.json();
-      } else {
-        // Try to extract error message from backend
-        try {
-          const errData = await res.json();
-          errorMessage = errData.detail || errorMessage;
-        } catch {
-          errorMessage = await res.text() || errorMessage;
+        if (res.ok) {
+          data = await res.json();
+        } else {
+          // Try to extract error message from backend
+          try {
+            const errData = await res.json();
+            errorMessage = errData.detail || errorMessage;
+          } catch {
+            errorMessage = (await res.text()) || errorMessage;
+          }
+          throw new Error(errorMessage);
         }
-        throw new Error(errorMessage);
-      }
 
-      // If backend returns ingredients for confirmation
-      if (data.ingredients && Array.isArray(data.ingredients)) {
-        setIngredientMatches(data.ingredients);
-        setCurrentIngredientIdx(0);
-        setMessages((prev) => [
-          ...prev,
-          { sender: "ai", text: "Let's confirm your ingredients one by one!" },
-        ]);
-      } else {
-        setMessages((prev) => [
-          ...prev,
-          { sender: "ai", text: data.reply || "No reply." },
-        ]);
+        // If backend returns ingredients for confirmation
+        if (data.ingredients && Array.isArray(data.ingredients)) {
+          setIngredientMatches(data.ingredients);
+          setCurrentIngredientIdx(0);
+          setMessages((prev) => [
+            ...prev,
+            {
+              sender: "ai",
+              text: "Let's confirm your ingredients one by one!",
+            },
+          ]);
+        } else {
+          setMessages((prev) => [
+            ...prev,
+            { sender: "ai", text: data.reply || "No reply." },
+          ]);
+        }
+      } catch (err) {
+        const errorMessage =
+          err?.message || "Sorry, I couldn't process your request.";
+        setMessages((prev) => [...prev, { sender: "ai", text: errorMessage }]);
+        setTimeout(() => {
+          setMessages((prev) => [
+            ...prev,
+            { sender: "ai", text: "What do you want to make today?" },
+          ]);
+        }, 500);
+      } finally {
+        setLoading(false);
       }
-    } catch (err) {
-      const errorMessage = err?.message || "Sorry, I couldn't process your request.";
-      setMessages((prev) => [...prev, { sender: "ai", text: errorMessage }]);
-      setTimeout(() => {
-        setMessages((prev) => [
-          ...prev,
-          { sender: "ai", text: "What do you want to make today?" },
-        ]);
-      }, 500);
-    } finally {
-      setLoading(false);
-    }
+    },
+    [loading]
+  );
+
+  const handleSend = () => {
+    void sendMessage(input);
   };
+
+  useEffect(() => {
+    setHasAutoSent(false);
+  }, [demoMessage]);
+
+  useEffect(() => {
+    autoAddDone.current = false;
+    if (autoAddTimer.current) {
+      clearTimeout(autoAddTimer.current);
+      autoAddTimer.current = null;
+    }
+  }, [demoMessage, demoAutoAddFirst]);
+
+  useEffect(() => {
+    if (!demoAutoSend || !demoMessage || hasAutoSent || loading) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      setHasAutoSent(true);
+      void sendMessage(demoMessage);
+    }, 600);
+
+    return () => clearTimeout(timer);
+  }, [demoAutoSend, demoMessage, hasAutoSent, loading, sendMessage]);
+
+  useEffect(() => {
+    if (!demoAutoAddFirst) {
+      return;
+    }
+
+    if (ingredientMatches.length === 0) {
+      return;
+    }
+
+    if (currentIngredientIdx !== 0) {
+      return;
+    }
+
+    if (autoAddDone.current) {
+      return;
+    }
+
+    const currentIngredient = ingredientMatches[currentIngredientIdx];
+    const firstMatch = currentIngredient.matches?.[0];
+
+    autoAddDone.current = true;
+    autoAddTimer.current = setTimeout(() => {
+      if (firstMatch && addToCart) {
+        addToCart(firstMatch, 1);
+        toast({
+          title: "Added to cart",
+          description: `${firstMatch.productName} has been added to your cart.`,
+          duration: 2000,
+        });
+      }
+      setCurrentIngredientIdx((idx) => idx + 1);
+      autoAddTimer.current = null;
+    }, AUTO_ADD_DELAY_MS);
+
+    return () => {
+      if (autoAddTimer.current) {
+        clearTimeout(autoAddTimer.current);
+        autoAddTimer.current = null;
+      }
+    };
+  }, [
+    demoAutoAddFirst,
+    ingredientMatches,
+    currentIngredientIdx,
+    addToCart,
+    toast,
+  ]);
 
   // Ingredient confirmation UI
   if (
@@ -104,8 +207,24 @@ export default function ChatWindow({
     currentIngredientIdx < ingredientMatches.length
   ) {
     const ing = ingredientMatches[currentIngredientIdx];
+    const showDemoPointer =
+      demoAutoAddFirst && currentIngredientIdx === 0 && ing.matches.length > 0;
     return (
       <div className="fixed bottom-4 right-4 w-[40rem] h-[42rem] bg-white border border-gray-300 shadow-lg rounded-lg flex flex-col z-50">
+        {showDemoPointer && (
+          <style>{`
+            @keyframes demo-pointer-move {
+              0% { transform: translate(-24px, -8px) scale(0.9); opacity: 0; }
+              25% { opacity: 1; }
+              100% { transform: translate(0, 0) scale(1); opacity: 1; }
+            }
+            @keyframes demo-pointer-click {
+              0%, 70% { transform: scale(0.2); opacity: 0; }
+              80% { transform: scale(1); opacity: 0.7; }
+              100% { transform: scale(1.4); opacity: 0; }
+            }
+          `}</style>
+        )}
         <div className="flex justify-between items-center p-2 border-b bg-walmart-blue text-white rounded-t-lg">
           <span>Ingredient Confirmation</span>
           <button onClick={onClose} className="text-white font-bold text-lg">
@@ -113,6 +232,11 @@ export default function ChatWindow({
           </button>
         </div>
         <div className="flex-1 p-2 overflow-y-auto space-y-2 text-sm flex flex-col">
+          {showDemoPointer && (
+            <div className="text-xs text-walmart-blue font-medium">
+              Auto-adding for demo
+            </div>
+          )}
           {/* Show chat history above ingredient confirmation */}
           {messages.map((msg, idx) => (
             <div
@@ -135,9 +259,10 @@ export default function ChatWindow({
             <div className="text-gray-500">No close product matches found.</div>
           )}
           <ul>
-            {ing.matches.map((match) => {
+            {ing.matches.map((match, matchIndex) => {
               const imageUrl = match.imageUrl;
               const displayPrice = match.discountPrice || match.price;
+              const showPointerHere = showDemoPointer && matchIndex === 0;
 
               return (
                 <li
@@ -188,7 +313,7 @@ export default function ChatWindow({
                     </div>
                     <Button
                       size="sm"
-                      className="text-xs px-3 py-1 h-7"
+                      className="text-xs px-3 py-1 h-7 relative"
                       onClick={() => {
                         if (addToCart) {
                           addToCart(match, 1);
@@ -201,6 +326,52 @@ export default function ChatWindow({
                         setCurrentIngredientIdx((idx) => idx + 1);
                       }}
                     >
+                      {showPointerHere && (
+                        <span className="absolute left-14 top-1/2 pointer-events-none">
+                          <span className="block -translate-y-1/2">
+                            <span
+                              className="block"
+                              style={{
+                                animation:
+                                  "demo-pointer-move 1.2s ease-in-out infinite",
+                                willChange: "transform, opacity",
+                              }}
+                            >
+                              <span
+                                className="relative inline-block"
+                                style={{
+                                  transform: `translate(${demoPointerOffsetX}px, ${demoPointerOffsetY}px) scale(${DEMO_POINTER_SCALE})`,
+                                  transformOrigin: "0 0",
+                                }}
+                              >
+                                <svg
+                                  width="48"
+                                  height="48"
+                                  viewBox="0 0 48 48"
+                                  fill="none"
+                                  xmlns="http://www.w3.org/2000/svg"
+                                  style={{ display: "block" }}
+                                >
+                                  <path
+                                    d="M10 6L38 24L24 26L18 40L10 6Z"
+                                    fill="#ffffff"
+                                    stroke="#facc15"
+                                    strokeWidth="3"
+                                    strokeLinejoin="round"
+                                  />
+                                </svg>
+                                <span
+                                  className="absolute left-40 top-40 h-32 w-32 rounded-full border border-walmart-yellow"
+                                  style={{
+                                    animation:
+                                      "demo-pointer-click 1.2s ease-in-out infinite",
+                                  }}
+                                />
+                              </span>
+                            </span>
+                          </span>
+                        </span>
+                      )}
                       Add to Cart
                     </Button>
                   </div>

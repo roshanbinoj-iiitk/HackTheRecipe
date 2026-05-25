@@ -1,8 +1,23 @@
-import { useState, useMemo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import Header from "@/components/header";
 import ProductCard from "@/components/product-card";
 import CartSidebar from "@/components/cart-sidebar";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from "@/components/ui/sheet";
 import {
   Select,
   SelectContent,
@@ -22,7 +37,19 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Search } from "lucide-react";
 import { useCart } from "@/hooks/use-cart";
+import { useIsMobile } from "@/hooks/use-mobile";
+import { useToast } from "@/hooks/use-toast";
 import type { Product } from "@shared/schema";
+
+const DEMO_STORAGE_KEY = "htr_demo_seen";
+const DEMO_CHAT_MESSAGE = "paneer butter masala";
+
+type SpotlightRect = {
+  top: number;
+  left: number;
+  width: number;
+  height: number;
+};
 
 type PaginatedProducts = {
   items: Product[];
@@ -38,7 +65,20 @@ export default function Home() {
   const [sortOption, setSortOption] = useState("name");
   const [currentPage, setCurrentPage] = useState(1);
   const [isCartOpen, setIsCartOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isDemoOpen, setIsDemoOpen] = useState(false);
+  const [demoStep, setDemoStep] = useState(0);
+  const [hasSeenDemo, setHasSeenDemo] = useState(false);
+  const [spotlightRect, setSpotlightRect] = useState<SpotlightRect | null>(
+    null
+  );
   const productsPerPage = 50;
+  const isMobile = useIsMobile();
+  const { toast } = useToast();
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const chatButtonRef = useRef<HTMLButtonElement | null>(null);
+  const cartButtonRef = useRef<HTMLButtonElement | null>(null);
+  const filtersRef = useRef<HTMLDivElement | null>(null);
 
   const {
     cartItems,
@@ -117,6 +157,196 @@ export default function Home() {
     }
   };
 
+  const demoSteps = [
+    {
+      title: "Welcome to HackTheRecipe",
+      description:
+        "Here is a quick tour of the store. We will show search, filters, the AI chat, and your cart.",
+    },
+    {
+      title: "Search products",
+      description:
+        "We will search for a popular item so you can see how results update in real time.",
+    },
+    {
+      title: "Filter and sort",
+      description:
+        "Apply a category filter and sort by price to find the best deals faster.",
+    },
+    {
+      title: "Ask Recipe Master",
+      description:
+        `Click Recipe Master to open chat, then we will ask for ${DEMO_CHAT_MESSAGE}.`,
+    },
+    {
+      title: "Review your cart",
+      description:
+        "Open the cart sidebar to review items, adjust quantities, and check out.",
+    },
+  ];
+
+  const totalDemoSteps = demoSteps.length;
+  const currentDemoStep = demoSteps[Math.min(demoStep, totalDemoSteps - 1)];
+  const isLastDemoStep = demoStep >= totalDemoSteps - 1;
+  const demoChatMessage =
+    isDemoOpen && demoStep === 3 ? DEMO_CHAT_MESSAGE : undefined;
+  const demoChatAutoSend = isDemoOpen && demoStep === 3;
+  const demoChatAutoAddFirst = isDemoOpen && demoStep === 3;
+
+  const markDemoSeen = () => {
+    try {
+      localStorage.setItem(DEMO_STORAGE_KEY, "true");
+    } catch {
+      // Ignore storage write errors (private mode, blocked storage).
+    }
+    setHasSeenDemo(true);
+  };
+
+  const handleDemoFinish = () => {
+    markDemoSeen();
+    setIsDemoOpen(false);
+    setIsChatOpen(false);
+    toast({
+      title: "Demo complete",
+      description: "You are ready to shop and cook.",
+    });
+  };
+
+  const handleDemoSkip = () => {
+    markDemoSeen();
+    setIsDemoOpen(false);
+    setIsChatOpen(false);
+    setIsCartOpen(false);
+  };
+
+  const handleDemoNext = () => {
+    if (isLastDemoStep) {
+      handleDemoFinish();
+      return;
+    }
+    setDemoStep((prev) => Math.min(prev + 1, totalDemoSteps - 1));
+  };
+
+  const handleDemoBack = () => {
+    setDemoStep((prev) => Math.max(prev - 1, 0));
+  };
+
+  const handleReplayDemo = () => {
+    setDemoStep(0);
+    setIsChatOpen(false);
+    setIsCartOpen(false);
+    setIsDemoOpen(true);
+  };
+
+  const handleDemoOpenChange = (open: boolean) => {
+    if (!open) {
+      handleDemoSkip();
+      return;
+    }
+    setIsDemoOpen(true);
+  };
+
+  const updateSpotlight = useCallback(() => {
+    if (!isDemoOpen) {
+      setSpotlightRect(null);
+      return;
+    }
+
+    let target: HTMLElement | null = null;
+
+    if (demoStep <= 1) {
+      target = searchInputRef.current;
+    } else if (demoStep === 2) {
+      target = filtersRef.current;
+    } else if (demoStep === 3) {
+      target = chatButtonRef.current;
+    } else if (demoStep === 4) {
+      target = cartButtonRef.current;
+    }
+
+    if (!target) {
+      setSpotlightRect(null);
+      return;
+    }
+
+    const rect = target.getBoundingClientRect();
+    const padding = demoStep === 2 ? 12 : 10;
+
+    setSpotlightRect({
+      top: rect.top - padding,
+      left: rect.left - padding,
+      width: rect.width + padding * 2,
+      height: rect.height + padding * 2,
+    });
+  }, [demoStep, isDemoOpen]);
+
+  useEffect(() => {
+    try {
+      const seen = localStorage.getItem(DEMO_STORAGE_KEY) === "true";
+      setHasSeenDemo(seen);
+      if (!seen) {
+        setDemoStep(0);
+        setIsDemoOpen(true);
+      }
+    } catch {
+      setHasSeenDemo(false);
+      setDemoStep(0);
+      setIsDemoOpen(true);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isDemoOpen) {
+      return;
+    }
+
+    if (demoStep === 0) {
+      setIsChatOpen(false);
+      setIsCartOpen(false);
+    }
+
+    if (demoStep === 1) {
+      handleSearch("tomato");
+    }
+
+    if (demoStep === 2) {
+      handleSortChange("price-low");
+      if (!selectedCategory && categories.length > 0) {
+        handleCategoryChange(categories[7]);
+      }
+    }
+
+    if (demoStep === 3) {
+      setIsChatOpen(false);
+      setIsCartOpen(false);
+    }
+
+    if (demoStep === 4) {
+      setIsCartOpen(true);
+      setIsChatOpen(false);
+    }
+  }, [demoStep, isDemoOpen, categories, selectedCategory]);
+
+  useEffect(() => {
+    updateSpotlight();
+  }, [updateSpotlight]);
+
+  useEffect(() => {
+    if (!isDemoOpen) {
+      return;
+    }
+
+    const handleUpdate = () => updateSpotlight();
+
+    window.addEventListener("resize", handleUpdate);
+    window.addEventListener("scroll", handleUpdate, true);
+
+    return () => {
+      window.removeEventListener("resize", handleUpdate);
+      window.removeEventListener("scroll", handleUpdate, true);
+    };
+  }, [isDemoOpen, updateSpotlight]);
+
   if (error) {
     return (
       <div className="min-h-screen flex items-center justify-center">
@@ -138,6 +368,15 @@ export default function Home() {
         cartCount={getCartCount()}
         onCartClick={() => setIsCartOpen(true)}
         addToCart={addToCart}
+        isChatOpen={isChatOpen}
+        onChatOpenChange={setIsChatOpen}
+        onReplayDemo={hasSeenDemo ? handleReplayDemo : undefined}
+        searchInputRef={searchInputRef}
+        chatButtonRef={chatButtonRef}
+        cartButtonRef={cartButtonRef}
+        demoChatMessage={demoChatMessage}
+        demoChatAutoSend={demoChatAutoSend}
+        demoChatAutoAddFirst={demoChatAutoAddFirst}
       />
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -156,7 +395,7 @@ export default function Home() {
             </p>
           </div>
 
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-4" ref={filtersRef}>
             <Select
               value={selectedCategory || "all"}
               onValueChange={handleCategoryChange}
@@ -462,6 +701,87 @@ export default function Home() {
         onClearCart={clearCart}
         cartTotal={getCartTotal()}
       />
+
+      {isDemoOpen && spotlightRect && (
+        <div className="pointer-events-none fixed inset-0 z-40">
+          <div
+            className="absolute rounded-xl border-2 border-walmart-yellow/80 transition-all duration-200"
+            style={{
+              top: spotlightRect.top,
+              left: spotlightRect.left,
+              width: spotlightRect.width,
+              height: spotlightRect.height,
+              boxShadow: "0 0 0 9999px rgba(15, 23, 42, 0.55)",
+              backgroundColor: "rgba(255, 255, 255, 0.02)",
+            }}
+          />
+        </div>
+      )}
+
+      {/* Demo Overlay */}
+      {isMobile ? (
+        <Sheet open={isDemoOpen} onOpenChange={handleDemoOpenChange} modal={false}>
+          <SheetContent
+            side="bottom"
+            overlayClassName="bg-transparent pointer-events-none"
+            onInteractOutside={(event) => event.preventDefault()}
+          >
+            <SheetHeader>
+              <div className="text-xs uppercase tracking-wide text-gray-500">
+                Step {demoStep + 1} of {totalDemoSteps}
+              </div>
+              <SheetTitle>{currentDemoStep.title}</SheetTitle>
+              <SheetDescription>{currentDemoStep.description}</SheetDescription>
+            </SheetHeader>
+            <div className="flex items-center justify-between gap-2 pt-4">
+              <Button variant="ghost" onClick={handleDemoSkip}>
+                Skip
+              </Button>
+              <div className="flex items-center gap-2">
+                {demoStep > 0 && (
+                  <Button variant="outline" onClick={handleDemoBack}>
+                    Back
+                  </Button>
+                )}
+                <Button onClick={handleDemoNext}>
+                  {isLastDemoStep ? "Finish" : "Next"}
+                </Button>
+              </div>
+            </div>
+          </SheetContent>
+        </Sheet>
+      ) : (
+        <Dialog open={isDemoOpen} onOpenChange={handleDemoOpenChange} modal={false}>
+          <DialogContent
+            overlayClassName="bg-transparent pointer-events-none"
+            className={isChatOpen ? "md:translate-x-[-70%]" : undefined}
+            onInteractOutside={(event) => event.preventDefault()}
+          >
+            <DialogHeader>
+              <div className="text-xs uppercase tracking-wide text-gray-500">
+                Step {demoStep + 1} of {totalDemoSteps}
+              </div>
+              <DialogTitle>{currentDemoStep.title}</DialogTitle>
+              <DialogDescription>{currentDemoStep.description}</DialogDescription>
+            </DialogHeader>
+            <div className="flex items-center justify-between gap-2">
+              <Button variant="ghost" onClick={handleDemoSkip}>
+                Skip
+              </Button>
+              <div className="flex items-center gap-2">
+                {demoStep > 0 && (
+                  <Button variant="outline" onClick={handleDemoBack}>
+                    Back
+                  </Button>
+                )}
+                <Button onClick={handleDemoNext}>
+                  {isLastDemoStep ? "Finish" : "Next"}
+                </Button>
+              </div>
+            </div>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }

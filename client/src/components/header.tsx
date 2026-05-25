@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Search, User, ShoppingCart, ChefHat } from "lucide-react";
+import { useEffect, useState, type Ref } from "react";
+import { Search, User, ShoppingCart, ChefHat, Sparkles } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import ChatWindow from "@/components/chat/ChatWindow";
@@ -11,6 +11,15 @@ interface HeaderProps {
   cartCount: number;
   onCartClick: () => void;
   addToCart: (product: Product, quantity?: number) => void;
+  isChatOpen?: boolean;
+  onChatOpenChange?: (open: boolean) => void;
+  onReplayDemo?: () => void;
+  searchInputRef?: Ref<HTMLInputElement>;
+  chatButtonRef?: Ref<HTMLButtonElement>;
+  cartButtonRef?: Ref<HTMLButtonElement>;
+  demoChatMessage?: string;
+  demoChatAutoSend?: boolean;
+  demoChatAutoAddFirst?: boolean;
 }
 
 export default function Header({
@@ -19,9 +28,30 @@ export default function Header({
   cartCount,
   onCartClick,
   addToCart,
+  isChatOpen: isChatOpenProp,
+  onChatOpenChange,
+  onReplayDemo,
+  searchInputRef,
+  chatButtonRef,
+  cartButtonRef,
+  demoChatMessage,
+  demoChatAutoSend,
+  demoChatAutoAddFirst,
 }: HeaderProps) {
   const [localSearchQuery, setLocalSearchQuery] = useState(searchQuery);
-  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [isChatOpenInternal, setIsChatOpenInternal] = useState(false);
+  const isChatOpen = isChatOpenProp ?? isChatOpenInternal;
+  const setChatOpen = (open: boolean) => {
+    if (onChatOpenChange) {
+      onChatOpenChange(open);
+      return;
+    }
+    setIsChatOpenInternal(open);
+  };
+
+  useEffect(() => {
+    setLocalSearchQuery(searchQuery);
+  }, [searchQuery]);
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
@@ -34,7 +64,8 @@ export default function Header({
     onSearch(value);
   };
 
-  const toggleChat = () => setIsChatOpen((prev) => !prev);
+  const toggleChat = () => setChatOpen(!isChatOpen);
+  const closeChat = () => setChatOpen(false);
 
   return (
     <>
@@ -58,6 +89,7 @@ export default function Header({
                   onChange={handleInputChange}
                   placeholder="Search for products, brands and more..."
                   className="w-full pl-10 pr-4 bg-gray-50 border-gray-300 focus:border-walmart-blue focus:ring-2 focus:ring-walmart-blue focus:ring-opacity-20"
+                  ref={searchInputRef}
                 />
                 <Search
                   className="absolute left-3 top-3 text-gray-400"
@@ -70,6 +102,7 @@ export default function Header({
                 variant="outline"
                 className="ml-2 px-4 py-2 h-10 bg-walmart-blue text-white hover:bg-walmart-dark-blue border-walmart-blue flex items-center space-x-2"
                 onClick={toggleChat}
+                ref={chatButtonRef}
               >
                 <ChefHat size={16} />
                 <span className="text-sm font-medium">Recipe Master</span>
@@ -78,6 +111,17 @@ export default function Header({
 
             {/* User Actions */}
             <div className="flex items-center space-x-4">
+              {onReplayDemo && (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  className="text-gray-600 hover:text-walmart-blue"
+                  onClick={onReplayDemo}
+                >
+                  <Sparkles size={18} className="mr-1" />
+                  Demo
+                </Button>
+              )}
               <Button
                 variant="ghost"
                 size="sm"
@@ -90,6 +134,7 @@ export default function Header({
                 size="sm"
                 className="text-gray-600 hover:text-walmart-blue relative"
                 onClick={onCartClick}
+                ref={cartButtonRef}
               >
                 <ShoppingCart size={20} />
                 {cartCount > 0 && (
@@ -104,7 +149,13 @@ export default function Header({
       </header>
 
       {isChatOpen && (
-        <ChatWindow onClose={toggleChat} addToCart={addToCart} />
+        <ChatWindow
+          onClose={closeChat}
+          addToCart={addToCart}
+          demoMessage={demoChatMessage}
+          demoAutoSend={demoChatAutoSend}
+          demoAutoAddFirst={demoChatAutoAddFirst}
+        />
       )}
     </>
   );
