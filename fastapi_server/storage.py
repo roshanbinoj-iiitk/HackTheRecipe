@@ -1,12 +1,37 @@
 import csv
-from typing import List
-from sqlalchemy import create_engine, text, cast, Float, func
+import os
+from pathlib import Path
+from sqlalchemy import Float, cast, create_engine, func, text
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from typing import List
+
 from models import ProductDB, Base
 
-DATABASE_URL = "sqlite:///./products.db"
+def _get_database_url() -> str:
+    db_dir = Path(os.environ.get("DB_DIR", "/tmp/fastapi"))
+    db_dir.mkdir(parents=True, exist_ok=True)
+    db_path = db_dir / "products.db"
+    return f"sqlite:///{db_path}"
 
-engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+DATABASE_URL = _get_database_url()
+
+def _create_engine():
+    try:
+        engine = create_engine(DATABASE_URL, connect_args={"check_same_thread": False})
+        with engine.connect():
+            pass
+        return engine
+    except OperationalError:
+        # Fallback to in-memory SQLite if filesystem is not writable in the runtime.
+        return create_engine(
+            "sqlite://",
+            connect_args={"check_same_thread": False},
+            poolclass=StaticPool,
+        )
+
+engine = _create_engine()
 SessionLocal = sessionmaker(bind=engine)
 Base.metadata.create_all(bind=engine)
 
@@ -21,7 +46,7 @@ class DBStorage:
             # Only load if table is empty
             if session.query(ProductDB).first():
                 return
-            with open('../attached_assets/bigbasket_products.csv', newline='', encoding='utf-8') as csvfile:
+            with open('bigbasket_products.csv', newline='', encoding='utf-8') as csvfile:
                 reader = csv.DictReader(csvfile)
                 products = [
                     ProductDB(
