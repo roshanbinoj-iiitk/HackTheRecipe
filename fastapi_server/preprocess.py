@@ -3,8 +3,11 @@ from collections import Counter
 from difflib import get_close_matches
 
 
+_TOKENIZER_RE = re.compile(r"[^\w\s]")
+
+
 def simple_tokenize(text):
-    text = re.sub(r'[^\w\s]', ' ', text.lower())
+    text = _TOKENIZER_RE.sub(' ', text.lower())
     return [word for word in text.split() if len(word) > 2]
 
 
@@ -23,9 +26,18 @@ def build_synonym_lookup(synonyms):
 
 def resolve_ingredient_key(norm_ingredient, synonyms, cutoff=0.84):
     variant_to_key = build_synonym_lookup(synonyms)
+    return resolve_ingredient_key_from_lookup(
+        norm_ingredient,
+        variant_to_key,
+        list(synonyms.keys()),
+        cutoff=cutoff,
+    )
+
+
+def resolve_ingredient_key_from_lookup(norm_ingredient, variant_to_key, synonym_keys, cutoff=0.84):
     if norm_ingredient in variant_to_key:
         return variant_to_key[norm_ingredient]
-    close = get_close_matches(norm_ingredient, list(synonyms.keys()), n=1, cutoff=cutoff)
+    close = get_close_matches(norm_ingredient, synonym_keys, n=1, cutoff=cutoff)
     if close:
         return close[0]
     return norm_ingredient

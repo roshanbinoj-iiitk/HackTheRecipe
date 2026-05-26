@@ -1,18 +1,20 @@
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 import os
+import json
 from dotenv import load_dotenv
-import sqlite3
 from pathlib import Path
 from langchain_google_genai import ChatGoogleGenerativeAI
 from difflib import get_close_matches
 import ast
 import csv
 from collections import Counter
+from redis import Redis
 from preprocess import (
     simple_tokenize,
     normalize_text,
-    resolve_ingredient_key,
+    resolve_ingredient_key_from_lookup,
+    build_synonym_lookup,
     get_token_frequency,
     token_rarity,
 )
@@ -45,14 +47,78 @@ class ChatResponse(BaseModel):
 _PRODUCTS_CACHE = None
 _TOKEN_FREQ = None
 _MAX_TOKEN_FREQ = 1
+_NORMALIZED_NAMES = None
+
+_REDIS_CLIENT = None
+_LLM_CLIENT = None
+
+_REDIS_URL = os.getenv("REDIS_URL", "").strip()
+_REDIS_PASSWORD = os.getenv("REDIS_PASSWORD", "")
+_REDIS_SSL = os.getenv("REDIS_SSL", "true").strip().lower() in ("1", "true", "yes")
+
+
+def _get_cache_ttl_seconds():
+    value = os.getenv("INGREDIENT_CACHE_TTL", "").strip()
+    if not value:
+        return 0
+    try:
+        return max(0, int(value))
+    except ValueError:
+        return 0
+
+
+_CACHE_TTL_SECONDS = _get_cache_ttl_seconds()
+
+
+def get_redis_client():
+    global _REDIS_CLIENT
+    if _REDIS_CLIENT is not None:
+        return _REDIS_CLIENT
+    if not _REDIS_URL:
+        return None
+    url = _REDIS_URL
+    if "://" not in url:
+        scheme = "rediss" if _REDIS_SSL else "redis"
+        url = f"{scheme}://{url}"
+    _REDIS_CLIENT = Redis.from_url(url, password=_REDIS_PASSWORD or None, decode_responses=True)
+    return _REDIS_CLIENT
+
+
+def get_llm_client(api_key):
+    global _LLM_CLIENT
+    if _LLM_CLIENT is None:
+        _LLM_CLIENT = ChatGoogleGenerativeAI(
+            model="gemini-3.1-flash-lite",
+            google_api_key=api_key,
+            temperature=0,
+        )
+    return _LLM_CLIENT
+
+
+def _normalize_llm_content(content):
+    if isinstance(content, list):
+        parts = []
+        for item in content:
+            if isinstance(item, str):
+                parts.append(item)
+            elif isinstance(item, dict) and "text" in item:
+                parts.append(str(item["text"]))
+            elif item is not None:
+                parts.append(str(item))
+        return "".join(parts).strip()
+    if content is None:
+        return ""
+    return str(content).strip()
 
 def get_all_products():
     global _PRODUCTS_CACHE
     global _TOKEN_FREQ
     global _MAX_TOKEN_FREQ
+    global _NORMALIZED_NAMES
     if _PRODUCTS_CACHE is not None:
         return _PRODUCTS_CACHE
     products = []
+    normalized_names = set()
     csv_path = Path(__file__).parent / "bigbasket_products.csv"
     if not csv_path.exists():
         # Fallback to same folder as chat.py
@@ -62,9 +128,16 @@ def get_all_products():
         for row in reader:
             product_name = (row.get("ProductName") or "").strip()
             brand_name = (row.get("Brand") or "").strip()
+            category_name = (row.get("Category") or "").strip()
+            sub_category_name = (row.get("SubCategory") or "").strip()
             name_tokens = simple_tokenize(product_name)
             brand_tokens = simple_tokenize(brand_name)
-            normalized_name = " ".join(name_tokens)
+            normalized_name = " ".join(name_tokens) or normalize_text(product_name)
+            normalized_brand = " ".join(brand_tokens)
+            normalized_full = f"{normalized_name} {normalized_brand}".strip()
+            name_token_set = set(name_tokens)
+            brand_token_set = set(brand_tokens)
+            normalized_names.add(normalized_name)
             products.append({
                 "id": row["ProductID"],
                 "productName": product_name,
@@ -72,47 +145,113 @@ def get_all_products():
                 "discountPrice": row["DiscountPrice"],
                 "brand": brand_name,
                 "imageUrl": row["Image_Url"],
-                "category": row["Category"],
-                "subCategory": row["SubCategory"],
+                "category": category_name,
+                "subCategory": sub_category_name,
+                "categoryLower": category_name.lower(),
+                "subCategoryLower": sub_category_name.lower(),
                 "absoluteUrl": row["Absolute_Url"],
+                "productNameLower": product_name.lower(),
+                "brandLower": brand_name.lower(),
                 "normalizedName": normalized_name,
+                "normalizedBrand": normalized_brand,
+                "normalizedFull": normalized_full,
                 "nameTokens": name_tokens,
                 "brandTokens": brand_tokens,
+                "nameTokenSet": name_token_set,
+                "brandTokenSet": brand_token_set,
             })
     _PRODUCTS_CACHE = products
     _TOKEN_FREQ, _MAX_TOKEN_FREQ = get_token_frequency(products)
+    _NORMALIZED_NAMES = list(normalized_names)
     return products
 
 
+_INGREDIENT_SYNONYMS = {
+    'chicken': ['chicken', 'poultry', 'hen', 'broiler', 'fresh boneless chicken breast', 'fresh boneless chicken thigh', 'breast', 'thigh'],
+    'onion': ['onion', 'pyaz', 'kanda'],
+    'tomato': ['tomato', 'tamatar'],
+    'potato': ['potato', 'aloo', 'batata'],
+    'rice': ['rice', 'chawal', 'basmati rice', 'jasmine'],
+    'oil': ['oil', 'tel', 'cooking oil'],
+    'salt': ['salt', 'namak', 'sea salt', 'rock salt', 'iodised'],
+    'sugar': ['sugar', 'cheeni', 'shakkar'],
+    'milk': ['milk', 'doodh', 'dairy'],
+    'butter': ['butter', 'makhan'],
+    'flour': ['flour', 'maida', 'atta', 'wheat flour'],
+    'paneer': ['paneer', 'cottage cheese'],
+    'yogurt': ['yogurt', 'curd', 'dahi'],
+    'ginger': ['ginger', 'adrak'],
+    'garlic': ['garlic', 'lahsun'],
+    'cumin': ['cumin', 'jeera'],
+    'turmeric': ['turmeric', 'haldi'],
+    'coriander': ['coriander', 'dhania'],
+    'pepper': ['pepper', 'kali mirch', 'black pepper'],
+    'cilantro': ['cilantro'],
+    'chili powder': ['chili powder', 'red chili powder', 'chilli powder'],
+    'garam masala': ['garam masala', 'garam'],
+    'fenugreek leaves': ['fenugreek leaves', 'kasuri methi', 'methi'],
+    'food coloring': ['food color', 'colouring', 'coloring', 'artificial colour', 'artificial color', 'edible color', 'edible dye', 'natural color', 'food colour - red', 'food colour - blue', 'food colour - green'],
+    'green chili': ['green chili', 'hari mirch', 'green chilli', 'green chilies', 'green chilly'],
+    'red chili powder': ['red chili powder', 'red chili', 'lal mirch', 'red chilies', 'red chilly']
+}
+
+
 def get_ingredient_synonyms():
-    return {
-        'chicken': ['chicken', 'poultry', 'hen', 'broiler', 'fresh boneless chicken breast', 'fresh boneless chicken thigh', 'breast', 'thigh'],
-        'onion': ['onion', 'pyaz', 'kanda'],
-        'tomato': ['tomato', 'tamatar'],
-        'potato': ['potato', 'aloo', 'batata'],
-        'rice': ['rice', 'chawal', 'basmati rice', 'jasmine'],
-        'oil': ['oil', 'tel', 'cooking oil'],
-        'salt': ['salt', 'namak', 'sea salt', 'rock salt', 'iodised'],
-        'sugar': ['sugar', 'cheeni', 'shakkar'],
-        'milk': ['milk', 'doodh', 'dairy'],
-        'butter': ['butter', 'makhan'],
-        'flour': ['flour', 'maida', 'atta', 'wheat flour'],
-        'paneer': ['paneer', 'cottage cheese'],
-        'yogurt': ['yogurt', 'curd', 'dahi'],
-        'ginger': ['ginger', 'adrak'],
-        'garlic': ['garlic', 'lahsun'],
-        'cumin': ['cumin', 'jeera'],
-        'turmeric': ['turmeric', 'haldi'],
-        'coriander': ['coriander', 'dhania'],
-        'pepper': ['pepper', 'kali mirch', 'black pepper'],
-        'cilantro': ['cilantro'],
-        'chili powder': ['chili powder', 'red chili powder','chilli powder'],
-        'garam masala': ['garam masala', 'garam'],
-        'fenugreek leaves': ['fenugreek leaves', 'kasuri methi','methi'],
-        'food coloring': ['food color', 'colouring', 'coloring', 'artificial colour', 'artificial color', 'edible color', 'edible dye', 'natural color', 'food colour - red', 'food colour - blue', 'food colour - green'],
-        'green chili': ['green chili', 'hari mirch', 'green chilli', 'green chilies', 'green chilly'],
-        'red chili powder': ['red chili powder', 'red chili', 'lal mirch', 'red chilies', 'red chilly']
-    }
+    return _INGREDIENT_SYNONYMS
+
+
+_SYNONYM_LOOKUP = build_synonym_lookup(_INGREDIENT_SYNONYMS)
+_SYNONYM_KEYS = list(_INGREDIENT_SYNONYMS.keys())
+
+_PREFERRED_CATEGORIES = [
+    'fruits', 'vegetables', 'meat', 'seafood', 'dairy', 'grains', 'spices',
+    'oil', 'condiments', 'bakery', 'fresh produce', 'protein', 'staples'
+]
+
+_INGREDIENT_CATEGORY_HINTS = {
+    'chicken': ['meat', 'poultry', 'protein'],
+    'onion': ['vegetables', 'fresh produce'],
+    'tomato': ['vegetables', 'fresh produce'],
+    'potato': ['vegetables', 'fresh produce'],
+    'rice': ['grains', 'staples'],
+    'oil': ['oil', 'staples'],
+    'salt': ['spices', 'staples'],
+    'sugar': ['staples'],
+    'milk': ['dairy'],
+    'butter': ['dairy'],
+    'flour': ['bakery', 'grains', 'staples'],
+    'paneer': ['dairy'],
+    'yogurt': ['dairy'],
+    'ginger': ['spices', 'vegetables'],
+    'garlic': ['spices', 'vegetables'],
+    'cumin': ['spices'],
+    'turmeric': ['spices'],
+    'coriander': ['spices'],
+    'pepper': ['spices'],
+    'chili powder': ['spices'],
+    'garam masala': ['spices'],
+    'fenugreek leaves': ['spices'],
+    'green chili': ['spices'],
+    'red chili powder': ['spices'],
+}
+
+_EXCLUDE_KEYWORDS = [
+    'ready', 'instant', 'mix', 'frozen', 'prepared', 'cooked', 'fried', 'baked', 'soap', 'cleaner', 'detergent',
+    'curry', 'gravy', 'sauce', 'paste', 'seasoning', 'dip', 'dips',
+    'snack', 'chips', 'crackers', 'biscuit', 'cookie', 'cake', 'bread',
+    'burger', 'pizza', 'sandwich', 'roll', 'wrap', 'patty', 'nugget',
+    'momo', 'dumpling', 'noodles', 'pasta', 'soup', 'biryani',
+    'flavour', 'flavored', 'spiced', 'seasoned', 'marinated', 'pickled'
+]
+
+_PREFERRED_KEYWORDS = ['fresh', 'raw', 'organic', 'pure', 'natural', 'whole']
+
+_FOOD_COLOR_BAD_PHRASES = [
+    'no artificial colour', 'no artificial color', 'no added color', 'no added colour',
+    'without artificial colour', 'without artificial color'
+]
+
+_FOOD_COLOR_TERMS = ['food colour', 'food color', 'edible colour', 'edible color']
 
 def calculate_text_similarity(text1, text2):
     tokens1 = set(simple_tokenize(text1))
@@ -125,91 +264,53 @@ def calculate_text_similarity(text1, text2):
 
 def smart_ingredient_matching(ingredient, products):
     norm_ingredient = ingredient.strip().lower()
-    synonyms = get_ingredient_synonyms()
-    canonical_key = resolve_ingredient_key(norm_ingredient, synonyms)
+    synonyms = _INGREDIENT_SYNONYMS
+    canonical_key = resolve_ingredient_key_from_lookup(norm_ingredient, _SYNONYM_LOOKUP, _SYNONYM_KEYS)
     ingredient_variations = synonyms.get(canonical_key, [canonical_key]) + [norm_ingredient, canonical_key]
     ingredient_variations = list(dict.fromkeys([v for v in ingredient_variations if v]))
     normalized_ingredient = normalize_text(norm_ingredient) or norm_ingredient
+    ingredient_token_set = set(simple_tokenize(normalized_ingredient))
+
+    variation_entries = []
+    for variation in ingredient_variations:
+        variation_norm = variation.strip().lower()
+        variation_tokens = simple_tokenize(variation_norm)
+        if not variation_tokens:
+            continue
+        variation_phrase = " ".join(variation_tokens)
+        variation_entries.append((variation_norm, variation_tokens, variation_phrase))
 
     if canonical_key == "food coloring":
         def has_coloring(term):
             term = term.lower()
-            bad_phrases = ['no artificial colour', 'no artificial color', 'no added color', 'no added colour',
-                           'without artificial colour', 'without artificial color']
-            if any(bad in term for bad in bad_phrases):
+            if any(bad in term for bad in _FOOD_COLOR_BAD_PHRASES):
                 return False
-            return any(color in term for color in ['food colour', 'food color', 'edible colour', 'edible color'])
+            return any(color in term for color in _FOOD_COLOR_TERMS)
 
         matches = [p for p in products if has_coloring(p["productName"])]
         return matches[:8]
-
-    preferred_categories = [
-        'fruits', 'vegetables', 'meat', 'seafood', 'dairy', 'grains', 'spices',
-        'oil', 'condiments', 'bakery', 'fresh produce', 'protein', 'staples'
-    ]
-
-    ingredient_category_hints = {
-        'chicken': ['meat', 'poultry', 'protein'],
-        'onion': ['vegetables', 'fresh produce'],
-        'tomato': ['vegetables', 'fresh produce'],
-        'potato': ['vegetables', 'fresh produce'],
-        'rice': ['grains', 'staples'],
-        'oil': ['oil', 'staples'],
-        'salt': ['spices', 'staples'],
-        'sugar': ['staples'],
-        'milk': ['dairy'],
-        'butter': ['dairy'],
-        'flour': ['bakery', 'grains', 'staples'],
-        'paneer': ['dairy'],
-        'yogurt': ['dairy'],
-        'ginger': ['spices', 'vegetables'],
-        'garlic': ['spices', 'vegetables'],
-        'cumin': ['spices'],
-        'turmeric': ['spices'],
-        'coriander': ['spices'],
-        'pepper': ['spices'],
-        'chili powder': ['spices'],
-        'garam masala': ['spices'],
-        'fenugreek leaves': ['spices'],
-        'green chili': ['spices'],
-        'red chili powder': ['spices'],
-    }
-
-    exclude_keywords = [
-        'ready', 'instant', 'mix', 'frozen', 'prepared', 'cooked', 'fried', 'baked','soap', 'cleaner', 'detergent',
-        'curry', 'gravy', 'sauce', 'paste', 'seasoning', 'dip', 'dips',
-        'snack', 'chips', 'crackers', 'biscuit', 'cookie', 'cake', 'bread',
-        'burger', 'pizza', 'sandwich', 'roll', 'wrap', 'patty', 'nugget',
-        'momo', 'dumpling', 'noodles', 'pasta', 'soup', 'biryani',
-        'flavour', 'flavored', 'spiced', 'seasoned', 'marinated', 'pickled'
-    ]
 
     scored_matches = []
     token_freq = _TOKEN_FREQ or Counter()
     max_freq = _MAX_TOKEN_FREQ or 1
 
     for product in products:
-        product_name = product["productName"].strip().lower()
-        brand_name = product["brand"].strip().lower() if "brand" in product else ""
-        category = product["category"].strip().lower() if "category" in product else ""
-        sub_category = product["subCategory"].strip().lower() if "subCategory" in product else ""
+        product_name = product.get("productNameLower") or product["productName"].strip().lower()
+        brand_name = product.get("brandLower") or product.get("brand", "").strip().lower()
+        category = product.get("categoryLower") or product.get("category", "").strip().lower()
+        sub_category = product.get("subCategoryLower") or product.get("subCategory", "").strip().lower()
         normalized_name = product.get("normalizedName") or normalize_text(product_name)
         name_tokens = product.get("nameTokens") or simple_tokenize(product_name)
         brand_tokens = product.get("brandTokens") or simple_tokenize(brand_name)
-        name_token_set = set(name_tokens)
-        brand_token_set = set(brand_tokens)
-        normalized_brand = " ".join(brand_tokens)
-        normalized_full = f"{normalized_name} {normalized_brand}".strip()
+        name_token_set = product.get("nameTokenSet") or set(name_tokens)
+        brand_token_set = product.get("brandTokenSet") or set(brand_tokens)
+        normalized_brand = product.get("normalizedBrand") or " ".join(brand_tokens)
+        normalized_full = product.get("normalizedFull") or f"{normalized_name} {normalized_brand}".strip()
 
         score = 0
         matched_variation = None
 
-        for variation in ingredient_variations:
-            variation_norm = variation.strip().lower()
-            variation_tokens = simple_tokenize(variation_norm)
-            if not variation_tokens:
-                continue
-            variation_phrase = " ".join(variation_tokens)
+        for variation_norm, variation_tokens, variation_phrase in variation_entries:
 
             if variation_norm == product_name or variation_norm == brand_name:
                 score = max(score, 100)
@@ -243,20 +344,21 @@ def smart_ingredient_matching(ingredient, products):
                 matched_variation = variation_norm
 
         if score > 0:
-            if any(cat in category or cat in sub_category for cat in preferred_categories):
+            if any(cat in category or cat in sub_category for cat in _PREFERRED_CATEGORIES):
                 score += 15
-            category_hints = ingredient_category_hints.get(canonical_key, [])
+            category_hints = _INGREDIENT_CATEGORY_HINTS.get(canonical_key, [])
             if category_hints:
                 if any(h in category or h in sub_category for h in category_hints):
                     score += 15
                 elif category or sub_category:
                     score -= 10
-            similarity = calculate_text_similarity(normalized_ingredient, normalized_name)
-            score += similarity * 25
-            preferred_keywords = ['fresh', 'raw', 'organic', 'pure', 'natural', 'whole']
-            if any(k in normalized_full for k in preferred_keywords):
+            if ingredient_token_set and name_token_set:
+                intersection = ingredient_token_set.intersection(name_token_set)
+                union = ingredient_token_set.union(name_token_set)
+                score += (len(intersection) / len(union)) * 25 if union else 0
+            if any(k in normalized_full for k in _PREFERRED_KEYWORDS):
                 score += 20
-            if any(k in normalized_full for k in exclude_keywords):
+            if any(k in normalized_full for k in _EXCLUDE_KEYWORDS):
                 score -= 20
             if len(name_tokens) > 6:
                 score -= 8
@@ -269,55 +371,46 @@ def smart_ingredient_matching(ingredient, products):
     if scored_matches:
         return [match[0] for match in scored_matches[:8]]
 
-    normalized_names = {p.get("normalizedName") or normalize_text(p.get("productName", "")) for p in products}
-    close_names = get_close_matches(normalized_ingredient, list(normalized_names), n=8, cutoff=0.78)
+    normalized_names = _NORMALIZED_NAMES or []
+    close_names = get_close_matches(normalized_ingredient, normalized_names, n=8, cutoff=0.78)
     if close_names:
         close_set = set(close_names)
         return [p for p in products if (p.get("normalizedName") or normalize_text(p.get("productName", ""))) in close_set][:8]
     return []
 
-def get_db_connection():
-    db_path = Path(__file__).parent / "products.db"
-    conn = sqlite3.connect(db_path)
-    return conn
-
-def create_cache_table():
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS ingredient_cache (
-            dish_name TEXT PRIMARY KEY,
-            ingredients TEXT
-        )
-    """)
-    conn.commit()
-    conn.close()
-
 def get_cached_ingredients(dish_name):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute("SELECT ingredients FROM ingredient_cache WHERE dish_name = ?", (dish_name,))
-    row = cursor.fetchone()
-    conn.close()
-    if row:
+    client = get_redis_client()
+    if client is None:
+        return None
+    key = f"ingredients:{dish_name}"
+    try:
+        cached = client.get(key)
+    except Exception:
+        return None
+    if not cached:
+        return None
+    if _CACHE_TTL_SECONDS > 0:
         try:
-            return ast.literal_eval(row[0])
+            client.expire(key, _CACHE_TTL_SECONDS)
         except Exception:
-            return None
-    return None
+            pass
+    try:
+        return json.loads(cached)
+    except Exception:
+        return None
 
 def set_cached_ingredients(dish_name, ingredients):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    cursor.execute(
-        "INSERT OR REPLACE INTO ingredient_cache (dish_name, ingredients) VALUES (?, ?)",
-        (dish_name, str(ingredients))
-    )
-    conn.commit()
-    conn.close()
-
-# Ensure cache table exists at startup
-create_cache_table()
+    client = get_redis_client()
+    if client is None:
+        return
+    try:
+        payload = json.dumps(ingredients, ensure_ascii=True)
+        if _CACHE_TTL_SECONDS > 0:
+            client.set(f"ingredients:{dish_name}", payload, ex=_CACHE_TTL_SECONDS)
+        else:
+            client.set(f"ingredients:{dish_name}", payload)
+    except Exception:
+        return
 
 @router.post("", response_model=ChatResponse)
 def chat_endpoint(request: ChatRequest):
@@ -329,11 +422,7 @@ def chat_endpoint(request: ChatRequest):
         # Check cache first
         ingredients = get_cached_ingredients(normalized_message)
         if ingredients is None:
-            llm = ChatGoogleGenerativeAI(
-                model="gemini-2.5-flash",
-                google_api_key=api_key,
-                temperature=0,
-            )
+            llm = get_llm_client(api_key)
             prompt = (
                 f"Analyze the following request: '{request.message}'. "
                 "If this is asking for ingredients to make a food item, recipe, dish, or any edible item, "
@@ -347,7 +436,7 @@ def chat_endpoint(request: ChatRequest):
             )
 
             response = llm.invoke(prompt)
-            response_content = response.content.strip()
+            response_content = _normalize_llm_content(response.content)
             
             # Check if LLM detected a non-food item
             if response_content == "NON_FOOD_ITEM_DETECTED":
